@@ -43,7 +43,9 @@ export function validateEnvironment(
     throw new Error(`Invalid environment variables: ${invalidNames}`);
   }
 
-  if (new URL(environment.FRONTEND_ORIGIN).origin !== environment.FRONTEND_ORIGIN) {
+  if (
+    new URL(environment.FRONTEND_ORIGIN).origin !== environment.FRONTEND_ORIGIN
+  ) {
     throw new Error('FRONTEND_ORIGIN must be an HTTP(S) origin without a path');
   }
 

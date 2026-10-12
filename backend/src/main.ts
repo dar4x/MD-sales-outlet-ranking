@@ -7,7 +7,8 @@ import type { EnvironmentVariables } from './config/environment.validation.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
-  const config = app.get<ConfigService<EnvironmentVariables, true>>(ConfigService);
+  const config =
+    app.get<ConfigService<EnvironmentVariables, true>>(ConfigService);
   const host = config.get('BACKEND_HOST', { infer: true });
   const port = config.get('BACKEND_PORT', { infer: true });
 
