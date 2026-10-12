@@ -5,7 +5,10 @@ The original two-line README.md was replaced with setup and verification instruc
 
 - NestJS and strict TypeScript enforce readable feature modules and controller/service boundaries; an unstructured Express app was rejected.
 - Backend initialization uses current stable NestJS 12.1.3 with native ESM on Node 24. TypeScript 6.0.3 matches Nest CLI 12 and typescript-eslint 8 support; TypeScript 7 is newer but outside their supported range, so it was rejected for this foundation.
-- A dedicated config module loads the root `.env` and validates startup settings with class-validator/class-transformer. The global API prefix, CORS origin, DTO validation, and shutdown hooks are configured once at bootstrap; feature controllers remain deferred.
+- A dedicated config module loads the root `.env` and validates startup settings with class-validator/class-transformer. The global API prefix, CORS origin, DTO validation, and shutdown hooks share one setup function used by bootstrap and e2e tests.
+- Business features follow the developer's lightweight Clean Architecture rule in ARCHITECTURE.md, with plain domain/application code and Nest provider wiring at the module boundary. Flat health and realtime ping/pong avoid unnecessary business layers.
+- Health executes a real SELECT 1 through a dedicated query class; relying only on TypeORM's initialized flag would miss a database outage. Ping remains stateless after startup, and database failures produce HTTP 503 without exposing driver details.
+- The HTTP e2e test uses Node's built-in test runner, native fetch, and the actual app/PostgreSQL connection. Separate test compilation preserves decorator metadata and strict checking; another test runner or Nest testing adapter is unnecessary for this one endpoint.
 - Type-aware ESLint reports errors without changing files, and Prettier formats source separately; combining formatting with lint fixes was unnecessary. Exact dependency versions and a package lockfile make `npm ci` repeatable.
 - TypeORM migrations make schema changes reviewable; automatic synchronization is disabled.
 - Database initialization uses TypeORM 1.1.2, Nest adapter 12.0.2, and pg 8.23.1; their engine and peer requirements match Node 24.21.0 and NestJS 12. The backend minimum is Node 24.11.0 to match TypeORM's requirement.

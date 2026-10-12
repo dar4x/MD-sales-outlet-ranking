@@ -1,5 +1,5 @@
 /* External deps */
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import 'reflect-metadata';
@@ -7,6 +7,7 @@ import 'reflect-metadata';
 /* Internal deps */
 import { AppModule } from './app.module.js';
 import type { EnvironmentVariables } from './config/environment.validation.js';
+import { configureApplication } from './configure-application.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -15,16 +16,7 @@ async function bootstrap(): Promise<void> {
   const host = config.get('BACKEND_HOST', { infer: true });
   const port = config.get('BACKEND_PORT', { infer: true });
 
-  app.setGlobalPrefix('api');
-  app.enableCors({ origin: config.get('FRONTEND_ORIGIN', { infer: true }) });
-  app.useGlobalPipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
-  app.enableShutdownHooks();
+  configureApplication(app);
 
   await app.listen(port, host);
   Logger.log(`Backend listening at ${await app.getUrl()}/api`, 'Bootstrap');
