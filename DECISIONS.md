@@ -4,6 +4,9 @@ These decisions were made by the developer and implemented with AI assistance.
 The original two-line README.md was replaced with setup and verification instructions.
 
 - NestJS and strict TypeScript enforce readable feature modules and controller/service boundaries; an unstructured Express app was rejected.
+- Backend initialization uses current stable NestJS 12.1.3 with native ESM on Node 24. TypeScript 6.0.3 matches Nest CLI 12 and typescript-eslint 8 support; TypeScript 7 is newer but outside their supported range, so it was rejected for this foundation.
+- A dedicated config module loads the root `.env` and validates startup settings with class-validator/class-transformer. The global API prefix, CORS origin, DTO validation, and shutdown hooks are configured once at bootstrap; feature controllers remain deferred.
+- Type-aware ESLint reports errors without changing files, and Prettier formats source separately; combining formatting with lint fixes was unnecessary. Exact dependency versions and a package lockfile make `npm ci` repeatable.
 - TypeORM migrations make schema changes reviewable; automatic synchronization is disabled.
 - PostgreSQL is the source of truth for future SQL rankings and email outbox; a separate ranking cache is unnecessary now.
 - Socket.IO supports browser reconnection; raw WebSockets would require additional connection handling.
