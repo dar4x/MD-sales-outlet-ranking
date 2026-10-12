@@ -15,10 +15,12 @@ export class SocketIoAdapter extends IoAdapter {
     port: number,
     options: Partial<ServerOptions> = {},
   ): Server {
-    // Nest's server factory is untyped; keep the assertion at this boundary.
-    return super.createIOServer(port, {
+    const configuredOptions = {
       ...options,
       cors: { origin: this.frontendOrigin },
-    }) as Server;
+    };
+
+    // Nest declares full options; its Socket.IO factory accepts partial options.
+    return super.createIOServer(port, configuredOptions as ServerOptions);
   }
 }
