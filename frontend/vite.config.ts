@@ -13,7 +13,9 @@ function validateUrl(environment: Record<string, string>, name: string): void {
     throw new Error(`${name} must use HTTP or HTTPS`);
   }
   if (url.username || url.password || url.search || url.hash) {
-    throw new Error(`${name} must not include credentials, a query, or a fragment`);
+    throw new Error(
+      `${name} must not include credentials, a query, or a fragment`,
+    );
   }
   if (name === 'VITE_SOCKET_URL' && url.pathname !== '/') {
     throw new Error('VITE_SOCKET_URL must be the server origin without a path');
@@ -24,7 +26,9 @@ function getServerAddress(environment: Record<string, string>) {
   const host = environment.FRONTEND_HOST;
   const port = Number(environment.FRONTEND_PORT);
   if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error('Set FRONTEND_HOST and a valid FRONTEND_PORT in the root .env');
+    throw new Error(
+      'Set FRONTEND_HOST and a valid FRONTEND_PORT in the root .env',
+    );
   }
 
   return { host, port, strictPort: true };
