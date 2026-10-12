@@ -1,6 +1,9 @@
+/* External deps */
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { resolve } from 'node:path';
+
+/* Internal deps */
 import { validateEnvironment } from './environment.validation.js';
 
 @Module({

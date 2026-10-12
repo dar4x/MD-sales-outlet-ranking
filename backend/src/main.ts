@@ -1,7 +1,10 @@
-import 'reflect-metadata';
+/* External deps */
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import 'reflect-metadata';
+
+/* Internal deps */
 import { AppModule } from './app.module.js';
 import type { EnvironmentVariables } from './config/environment.validation.js';
 
