@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run typecheck && node scripts/build.mjs",
-    "preview": "vite preview",
+    "preview": "node scripts/preview.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
