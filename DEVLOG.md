@@ -25,3 +25,15 @@ Entries use local time from `date --iso-8601=seconds` and report only checks act
 - Consulted Context7 NestJS configuration/bootstrap and typescript-eslint documentation. No TypeORM, Socket.IO, scheduling, test runner, or business dependencies were added.
 - Not run: database integration/migration, ping/health/e2e, WebSocket pong, frontend/browser checks, or watch-mode restart on a source edit; these were not part of this branch. Infrastructure checks were not repeated. Exact `/status` model label remains inaccessible.
 - No push or merge was performed. Waiting for developer review and merge before database initialization.
+
+## 2026-10-13T04:10:23+06:00 — feature/backend-database
+
+- Ran `git checkout dev && git pull`, then `git checkout -b feature/backend-database`; preserved the developer's import-grouping changes from `fed344a`. Working tree was clean at branch creation.
+- Added TypeORM 1.1.2, Nest adapter 12.0.2, and pg 8.23.1 with `npm install --save-exact @nestjs/typeorm@12.0.2 typeorm@1.1.2 pg@8.23.1` in backend. Checked npm engines/peers against Node v24.21.0; updated the package and lockfile minimum to Node 24.11.0. Context7 supplied TypeORM, Nest adapter, and Node env-file documentation.
+- Added shared PostgreSQL options, Nest database module, CLI data source, database env validation, and the first empty migration. Synchronization and automatic migrations are disabled. Migration filename timestamp came from `date +%s%3N` (1791841766550); no Git timestamps were altered.
+- Passed: `docker compose config --quiet && docker compose up -d --wait`, `npm --prefix backend start`, and the README CORS curl command after TypeORM initialization. Stopped the backend with Ctrl+C.
+- Passed: `npm --prefix backend run migration:show` (pending then applied), `npm --prefix backend run migration:run` (applied, then no pending migrations), and `npm --prefix backend run migration:revert` (reverted, then reapplied). The README PostgreSQL inspection command showed only the migrations table and exactly one initial migration row.
+- Passed negative check: `POSTGRES_PORT=invalid npm --prefix backend run migration:show` exited 1 naming POSTGRES_PORT before connecting; shell overrides the env-file value. No unexpected implementation failures occurred. The AGENTS.md file search returned exit 1 because no file matched.
+- Passed: `npm --prefix backend ci`, `npm --prefix backend run format`, `rtk proxy npm --prefix backend run lint`, `npm --prefix backend run format:check`, `npm --prefix backend run typecheck`, `npm --prefix backend run build`, and `git diff --check`. Database/network operations ran outside sandbox due previously established restrictions.
+- Passed `docker compose down`; the PostgreSQL volume retains the applied empty migration. No domain logic, health/ping feature, WebSocket, frontend, or tests were implemented. Development watch mode and Mailpit HTTP were not rerun on this branch; their previous results are labeled in README. The exact `/status` model label remains inaccessible.
+- No push or merge was performed. Waiting for developer review and merge before backend health work.
