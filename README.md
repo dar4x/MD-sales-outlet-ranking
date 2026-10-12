@@ -2,7 +2,8 @@
 
 Retail-chain dashboard foundation. Local infrastructure, the NestJS backend,
 PostgreSQL connection, empty first migration, and ping/health endpoints are
-available. Business features, WebSockets, and frontend are not implemented yet.
+available, including Socket.IO ping/pong. Business features and frontend are not
+implemented yet.
 
 Prerequisites: Node.js 24.11 or newer (observed `v24.21.0`), npm, Docker Engine,
 and Docker Compose v2.
@@ -111,9 +112,11 @@ With PostgreSQL running, execute:
 npm --prefix backend test
 ```
 
-The single e2e test boots the actual application, connects to PostgreSQL, listens
-on an ephemeral localhost port, checks `/api/ping`, and closes the app afterward.
-It uses Node's built-in test runner and fetch; no test-runner package is required.
+The two e2e tests boot the actual application, connect to PostgreSQL, and listen
+on ephemeral localhost ports. They check `/api/ping` and a Socket.IO ping/pong
+exchange over WebSocket, then close their applications and connections.
+They use Node's built-in test runner, fetch, and WebSocket; no test-runner or
+additional test-client package is required.
 TypeScript compiles source and tests into ignored `.test-dist`; the runner loads
 root `.env` before importing the app. Typecheck and lint include the test files.
 
@@ -129,6 +132,30 @@ curl -i --max-time 10 http://127.0.0.1:3000/api/health
 
 Expect health HTTP 503 during the outage, ping HTTP 200, then health HTTP 200
 after PostgreSQL becomes ready. This check does not write domain data.
+
+## Realtime ping/pong
+
+Socket.IO shares the backend HTTP server and uses `/socket.io/`, separate from
+the `/api` prefix. Use the backend origin as the client URL: with the example
+env, `http://localhost:3000`. Its CORS origin comes from `FRONTEND_ORIGIN`.
+
+Clients emit `ping` with no payload and listen for `pong`, whose payload is
+`{"message":"pong"}`. Each reply goes to the requesting client.
+
+With the backend running, check the polling handshake and CORS header:
+
+```sh
+curl -i --header 'Origin: http://localhost:5173' 'http://127.0.0.1:3000/socket.io/?EIO=4&transport=polling'
+```
+
+Expect HTTP 200, `Access-Control-Allow-Origin: http://localhost:5173`, and an
+Engine.IO open packet beginning with `0`. Reproduce the actual WebSocket event
+exchange with `npm --prefix backend test`; its protocol helper connects the
+Socket.IO namespace before sending the application ping. The frontend will use
+socket.io-client rather than this test-only protocol helper.
+
+Socket.IO CORS applies to HTTP polling; browser WebSocket upgrades do not use
+CORS checks.
 
 ## Database migrations
 
@@ -190,8 +217,9 @@ A release branch is created from `dev` only at the end.
 
 Updated at the end of every branch. Commands reproduce the checks.
 Results retain earlier branch checks and are updated when rerun. Migration checks
-are from `feature/backend-database`; HTTP health and e2e checks are from
-`feature/backend-health`. Frontend checks remain pending.
+are from `feature/backend-database`; outage checks are from `feature/backend-health`;
+current HTTP, Socket.IO, and e2e checks are from `feature/backend-realtime`.
+Frontend checks remain pending.
 Infrastructure and smoke-test servers are stopped; the applied migration is
 retained in the PostgreSQL volume.
 
@@ -210,15 +238,17 @@ retained in the PostgreSQL volume.
 | Backend ping | Ping curl command above | Passed: HTTP 200, exact pong JSON |
 | Database health | Health curl command above | Passed: HTTP 200, status ok and database up |
 | Database outage and recovery | Outage commands above | Passed: health 503, ping 200, restored health 200 |
-| Backend e2e | `npm --prefix backend test` | Passed: 1 test, 0 failures |
-| WebSocket pong | Commands pending realtime branch | Not verified: not implemented |
+| Backend e2e | `npm --prefix backend test` | Passed: 2 tests, 0 failures |
+| WebSocket pong | `npm --prefix backend test` | Passed: application ping returned pong event with exact payload over WebSocket |
+| Socket.IO polling and CORS | Realtime polling curl above | Passed: HTTP 200, Engine.IO handshake, configured origin header |
+| Browser Socket.IO reconnection and two tabs | Frontend checks pending | Not verified: frontend not implemented |
 | Backend install | `npm --prefix backend ci` | Passed outside sandbox |
 | Backend typecheck | `npm --prefix backend run typecheck` | Passed |
 | Backend lint | `npm --prefix backend run lint` | Passed via RTK proxy |
 | Backend formatting | `npm --prefix backend run format:check` | Passed; `npm run format` also ran in backend |
 | Backend build | `npm --prefix backend run build` | Passed |
 | Backend compiled start | `npm --prefix backend start` | Passed outside sandbox with TypeORM connection initialized |
-| Backend development start | `npm --prefix backend run start:dev` | Passed in backend-init; not rerun in health branch; file-change restart not tested |
+| Backend development start | `npm --prefix backend run start:dev` | Passed in backend-init; not rerun in realtime branch; file-change restart not tested |
 | Backend HTTP listener and CORS | Ping curl command above | Passed: HTTP 200 and configured CORS header |
 | Invalid backend port | `BACKEND_PORT=invalid npm --prefix backend start` | Passed: expected exit 1 naming BACKEND_PORT |
 | Invalid frontend origin | `FRONTEND_ORIGIN=http://localhost:5173/path npm --prefix backend start` | Passed: expected exit 1 naming FRONTEND_ORIGIN |

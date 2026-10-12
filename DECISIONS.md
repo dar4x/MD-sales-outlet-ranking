@@ -16,6 +16,8 @@ The original two-line README.md was replaced with setup and verification instruc
 - The first migration has empty up/down methods and creates no domain schema; TypeORM records it in its history table. Migrations run only through explicit CLI commands, keeping startup free of schema writes.
 - PostgreSQL is the source of truth for future SQL rankings and email outbox; a separate ranking cache is unnecessary now.
 - Socket.IO supports browser reconnection; raw WebSockets would require additional connection handling.
+- Realtime initialization uses NestJS WebSocket/Socket.IO adapters 12.1.3 and Socket.IO 4.8.4 on the existing HTTP server. A flat gateway delegates the pong payload to a service; a custom adapter reads the validated frontend origin at bootstrap instead of reading env during decorator evaluation.
+- The realtime e2e test uses Node's native WebSocket and the documented Engine.IO/Socket.IO handshake. This tests the actual WebSocket transport without adding a test-client dependency; frontend code will use socket.io-client. Polling CORS is checked separately, since WebSocket upgrades do not use browser CORS checks.
 - React, TypeScript, and Vite keep the frontend independent; a router and UI framework are unnecessary for one page.
 - Environment variables configure connections and origins; checked-in example credentials are public local defaults, never production secrets.
 - Docker Compose runs PostgreSQL and Mailpit with localhost ports and a named database volume; application containers are unnecessary now.

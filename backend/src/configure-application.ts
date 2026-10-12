@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 
 /* Internal deps */
 import type { EnvironmentVariables } from './config/environment.validation.js';
+import { SocketIoAdapter } from './realtime/socket-io.adapter.js';
 
 export function configureApplication(app: INestApplication): void {
   const config =
@@ -12,6 +13,9 @@ export function configureApplication(app: INestApplication): void {
 
   app.setGlobalPrefix('api');
   app.enableCors({ origin: config.get('FRONTEND_ORIGIN', { infer: true }) });
+  app.useWebSocketAdapter(
+    new SocketIoAdapter(app, config.get('FRONTEND_ORIGIN', { infer: true })),
+  );
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
