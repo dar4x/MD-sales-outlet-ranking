@@ -3,12 +3,13 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
+import type { EnvironmentVariables } from './config/environment.validation.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
-  const config = app.get(ConfigService);
-  const host = config.getOrThrow<string>('BACKEND_HOST');
-  const port = Number(config.getOrThrow<string>('BACKEND_PORT'));
+  const config = app.get<ConfigService<EnvironmentVariables, true>>(ConfigService);
+  const host = config.get('BACKEND_HOST', { infer: true });
+  const port = config.get('BACKEND_PORT', { infer: true });
 
   await app.listen(port, host);
 }
