@@ -31,6 +31,28 @@ export class EnvironmentVariables {
     require_tld: false,
   })
   FRONTEND_ORIGIN!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  POSTGRES_HOST!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  POSTGRES_PORT!: number;
+
+  @IsString()
+  @IsNotEmpty()
+  POSTGRES_USER!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  POSTGRES_PASSWORD!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  POSTGRES_DB!: string;
 }
 
 export function validateEnvironment(

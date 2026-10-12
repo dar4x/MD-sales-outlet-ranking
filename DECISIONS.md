@@ -8,6 +8,9 @@ The original two-line README.md was replaced with setup and verification instruc
 - A dedicated config module loads the root `.env` and validates startup settings with class-validator/class-transformer. The global API prefix, CORS origin, DTO validation, and shutdown hooks are configured once at bootstrap; feature controllers remain deferred.
 - Type-aware ESLint reports errors without changing files, and Prettier formats source separately; combining formatting with lint fixes was unnecessary. Exact dependency versions and a package lockfile make `npm ci` repeatable.
 - TypeORM migrations make schema changes reviewable; automatic synchronization is disabled.
+- Database initialization uses TypeORM 1.1.2, Nest adapter 12.0.2, and pg 8.23.1; their engine and peer requirements match Node 24.21.0 and NestJS 12. The backend minimum is Node 24.11.0 to match TypeORM's requirement.
+- NestJS and the migration CLI share a PostgreSQL options factory and env validation. Migration scripts build first and use Node's native env-file support to load compiled ESM; adding ts-node or a second env-loading dependency was unnecessary.
+- The first migration has empty up/down methods and creates no domain schema; TypeORM records it in its history table. Migrations run only through explicit CLI commands, keeping startup free of schema writes.
 - PostgreSQL is the source of truth for future SQL rankings and email outbox; a separate ranking cache is unnecessary now.
 - Socket.IO supports browser reconnection; raw WebSockets would require additional connection handling.
 - React, TypeScript, and Vite keep the frontend independent; a router and UI framework are unnecessary for one page.
