@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:?Copy .env.example to .env first}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:?Set POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  mailpit:
+    image: ${MAILPIT_IMAGE:?Set MAILPIT_IMAGE}
+    ports:
+      - "127.0.0.1:${SMTP_PORT:?Set SMTP_PORT}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:?Set MAILPIT_UI_PORT}:8025"
+
+volumes:
+  postgres_data:
