@@ -13,7 +13,10 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "migration:run": "npm run build && node --env-file-if-exists=../.env ./node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js",
+    "migration:show": "npm run build && node --env-file-if-exists=../.env ./node_modules/typeorm/cli.js migration:show -d dist/database/data-source.js",
+    "migration:revert": "npm run build && node --env-file-if-exists=../.env ./node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js"
   },
   "dependencies": {
     "@nestjs/common": "12.1.3",
