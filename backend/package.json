@@ -11,13 +11,14 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "typecheck": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit",
-    "test": "tsc -p test/tsconfig.json && node --env-file-if-exists=../.env --test .test-dist/test/*.e2e-spec.js",
+    "test": "tsc -p test/tsconfig.json && POSTGRES_DB=sales_ranking_test node --env-file-if-exists=../.env --test --test-concurrency=1 '.test-dist/test/*.e2e-spec.js' '.test-dist/test/*.integration-spec.js' '.test-dist/test/*.unit-spec.js'",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "migration:run": "npm run build && node --env-file-if-exists=../.env ./node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js",
     "migration:show": "npm run build && node --env-file-if-exists=../.env ./node_modules/typeorm/cli.js migration:show -d dist/database/data-source.js",
-    "migration:revert": "npm run build && node --env-file-if-exists=../.env ./node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js"
+    "migration:revert": "npm run build && node --env-file-if-exists=../.env ./node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js",
+    "test:db:setup": "tsc -p test/tsconfig.json && POSTGRES_DB=sales_ranking_test node --env-file-if-exists=../.env .test-dist/test/setup-test-database.js"
   },
   "dependencies": {
     "@nestjs/common": "12.1.3",
@@ -42,6 +43,7 @@
     "eslint": "10.12.0",
     "eslint-config-prettier": "10.1.8",
     "prettier": "3.9.10",
+    "socket.io-client": "4.8.4",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.2"
   }

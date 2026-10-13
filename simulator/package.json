@@ -1,0 +1,27 @@
+{
+  "name": "sales-outlet-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.11.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "build": "tsc",
+    "test": "npm run build && node --test --test-concurrency=1 'dist/test/*.unit-spec.js'",
+    "start": "node dist/src/main.js",
+    "start:all": "node dist/src/launch.js"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "eslint": "10.12.0",
+    "@eslint/js": "10.0.1",
+    "typescript-eslint": "8.71.2",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.10"
+  }
+}
