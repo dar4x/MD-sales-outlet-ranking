@@ -4,8 +4,9 @@ Retail-chain ranking dashboard backed by PostgreSQL and NestJS. The independent
 React frontend loads rankings over HTTP and receives live Socket.IO snapshots.
 The backend implements sale/return ingestion, outlet cards/settings, products,
 alerts and email delivery. The frontend connects rankings, outlet details and
-settings, alerts and the product catalogue. The interface uses basic HTML with
-minimal CSS; sales and returns come from the simulator.
+settings, alerts and the product catalogue. The interface has a responsive light
+SaaS layout; sales and returns come from the simulator. See
+[design references, screenshots and browser verification](docs/FRONTEND_DESIGN.md).
 
 Prerequisites: Node.js 24.11 or newer (observed `v24.21.0`), npm, Docker Engine,
 and Docker Compose v2.
