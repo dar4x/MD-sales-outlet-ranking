@@ -46,6 +46,9 @@ export class PostgresRankingQuery implements RankingQuery {
           s.receipt_count
         FROM bounds b JOIN sale_totals s USING (outlet_id)
         LEFT JOIN return_totals r USING (outlet_id)
+      ), ranked AS (
+        SELECT *, row_number() OVER (ORDER BY net DESC, outlet_id ASC)::integer AS rank
+        FROM metrics
       )
       SELECT i.as_of, COALESCE((
         SELECT jsonb_agg(jsonb_build_object(
@@ -53,11 +56,11 @@ export class PostgresRankingQuery implements RankingQuery {
           'local_date', (as_of AT TIME ZONE time_zone)::date::text,
           'starts_at', to_char(starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
           'ends_at', to_char(as_of AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
-          'rank', 0, 'net_revenue_minor', net::text, 'receipt_count', receipt_count,
+          'rank', rank, 'net_revenue_minor', net::text, 'receipt_count', receipt_count,
           'average_check_minor', round(net / NULLIF(receipt_count, 0))::text, 'previous_revenue_minor', NULL,
           'dynamics_bps', NULL, 'is_leader', false, 'is_laggard', false,
           'stale', false, 'behind_plan', false
-        ) ORDER BY outlet_id) FROM metrics
+        ) ORDER BY rank) FROM ranked
       ), '[]'::jsonb) AS rows FROM instant i
       `,
         [window, asOf ?? null],

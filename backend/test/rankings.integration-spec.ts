@@ -88,4 +88,24 @@ await describe('PostgresRankingQuery', async () => {
       }
     }
   });
+  await it('assigns unique ranks by revenue then ascending outlet_id', async () => {
+    await sale(ALMATY_OUTLET_ID, '2026-10-13T05:30:00Z', 100n);
+    await sale(BISHKEK_OUTLET_ID, '2026-10-13T05:30:00Z', 100n);
+    const snapshot = await query.get('hour', asOf);
+    const outlets: { outlet_id: string }[] = await dataSource.query(
+      'SELECT outlet_id FROM outlets ORDER BY outlet_id',
+    );
+    const expected = [BISHKEK_OUTLET_ID, ALMATY_OUTLET_ID];
+    for (const outlet of outlets) {
+      if (!expected.includes(outlet.outlet_id)) expected.push(outlet.outlet_id);
+    }
+    assert.deepEqual(
+      snapshot.rows.map((row) => row.outlet_id),
+      expected,
+    );
+    assert.deepEqual(
+      snapshot.rows.map((row) => row.rank),
+      expected.map((_, index) => index + 1),
+    );
+  });
 });
