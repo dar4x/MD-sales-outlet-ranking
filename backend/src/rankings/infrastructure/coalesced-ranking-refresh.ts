@@ -3,6 +3,7 @@ import type { RankingRefreshRequester } from '../application/ports/ranking-ports
 
 export class CoalescedRankingRefresh implements RankingRefreshRequester {
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private interval: ReturnType<typeof setInterval> | undefined;
   private running = false;
   private pending = false;
   private stopped = false;
@@ -11,7 +12,14 @@ export class CoalescedRankingRefresh implements RankingRefreshRequester {
     private readonly refresh: () => Promise<void>,
     private readonly delayMs: number,
     private readonly logFailure: (error: unknown) => void,
+    private readonly intervalMs?: number,
   ) {}
+
+  onModuleInit(): void {
+    if (this.intervalMs !== undefined && !this.stopped) {
+      this.interval = setInterval(() => this.request(), this.intervalMs);
+    }
+  }
 
   request(): void {
     if (this.stopped) return;
@@ -43,6 +51,7 @@ export class CoalescedRankingRefresh implements RankingRefreshRequester {
 
   onModuleDestroy(): void {
     this.stopped = true;
+    clearInterval(this.interval);
     clearTimeout(this.timer);
   }
 }

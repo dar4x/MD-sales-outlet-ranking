@@ -121,3 +121,22 @@ await it('cancels a queued refresh on shutdown', async () => {
   await delay(60);
   assert.equal(calls, 0);
 });
+
+await it('clears the periodic tick on shutdown', async () => {
+  let calls = 0;
+  const refresh = new CoalescedRankingRefresh(
+    async () => {
+      calls += 1;
+    },
+    5,
+    (error) => assert.fail(String(error)),
+    20,
+  );
+  refresh.onModuleInit();
+  await delay(100);
+  assert.ok(calls > 0);
+  refresh.onModuleDestroy();
+  const before = calls;
+  await delay(80);
+  assert.equal(calls, before);
+});

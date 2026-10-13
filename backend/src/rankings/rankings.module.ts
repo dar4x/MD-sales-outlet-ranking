@@ -38,6 +38,7 @@ const logger = new Logger('RankingRefresh');
           () => publishRankings.execute(),
           config.get('REALTIME_COALESCE_MS', { infer: true }),
           (error) => logger.error('Ranking refresh failed.', error),
+          config.get('REALTIME_REFRESH_INTERVAL_MS', { infer: true }),
         ),
     },
     {

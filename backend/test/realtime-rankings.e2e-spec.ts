@@ -10,7 +10,7 @@ import 'reflect-metadata';
 /* Internal deps */
 import { BISHKEK_OUTLET_ID, BREAD_PRODUCT_ID } from './seed-data.js';
 import { RankingsGateway } from '../src/rankings/presentation/rankings.gateway.js';
-import { AppModule } from '../src/app.module.js';
+
 import { configureApplication } from '../src/configure-application.js';
 import type { RankingSnapshot } from '../src/rankings/application/read-models/ranking.js';
 import { assertTestDatabase } from './test-database.js';
@@ -21,12 +21,14 @@ import {
 } from './ranking-socket-client.js';
 
 assertTestDatabase();
+process.env.REALTIME_REFRESH_INTERVAL_MS = '60000';
+process.env.REALTIME_COALESCE_MS = '40';
+// Set test config before ConfigModule validates the environment at import time.
+const { AppModule } = await import('../src/app.module.js');
 let app: INestApplication;
 let url: string;
 await describe('Realtime rankings subscriptions', async () => {
   before(async () => {
-    process.env.REALTIME_REFRESH_INTERVAL_MS = '60000';
-    process.env.REALTIME_COALESCE_MS = '40';
     app = await NestFactory.create(AppModule, { logger: false });
     configureApplication(app);
     await app.listen(0, '127.0.0.1');
