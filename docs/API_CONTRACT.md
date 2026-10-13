@@ -1,8 +1,9 @@
 # Planned API contract
 
-Implemented: sale/return ingestion, product/outlet lists, HTTP and Socket.IO rankings,
-ping/health and Socket.IO ping/pong. Other business routes below remain planned. Developer-approved decisions,
-implemented with AI assistance; independent frontend contracts must not import backend.
+Implemented: sale/return ingestion, product/outlet lists, outlet cards/settings,
+HTTP and Socket.IO rankings, stale/noon alerts, and persisted Mailpit email delivery.
+Developer-approved decisions, implemented with AI assistance; independent frontend
+contracts must not import backend.
 
 ## Encoding and errors
 
@@ -70,8 +71,8 @@ the client must subscribe again to obtain a fresh initial snapshot. Window belon
 to each client (localStorage), not a stored chain-wide setting. Frontend computes
 rank movement from successive snapshots.
 
-Newly created sales request refresh only after commit; duplicate retries and
-rejected events never request refresh. Future settings/alert changes will use the
+Newly created sales and returns request refresh only after commit; duplicate retries and
+rejected events never request refresh. Committed settings and alert flag changes use the
 same request port. REALTIME_COALESCE_MS defaults to 250: each event request resets
 the trailing delay, so a burst's final read includes its last committed event.
 If a request arrives during a read, exactly one additional refresh follows that
@@ -95,11 +96,13 @@ dynamics_bps, is_leader, is_laggard, stale, behind_plan }`.
 Hour dynamics compare preceding hour; business-day previous revenue and dynamics
 are null. Descending net revenue, ascending outlet_id gives unique stable ranks.
 With at least two outlets and unequal revenues, first/last ranks are leader/laggard.
-Both flags are false for one outlet or when all revenues are equal. Stale and
-behind_plan remain false until alerts are implemented.
+Both leader/laggard flags are false for one outlet or when all revenues are equal.
+Stale and behind_plan reflect persisted episodes; behind_plan expires at local
+midnight for the outlet even before the next evaluation tick.
 
 RankingQuery takes an optional as_of instant for deterministic tests; production
-omits it and SQL captures COALESCE(as_of, clock_timestamp()) once per response.
+omits it and SQL captures COALESCE(as_of, clock_timestamp()) once per response, truncated
+to milliseconds so wire timestamps and half-open bounds have the same precision.
 This is a port parameter, not an HTTP query field. Missing HTTP window defaults
 to business_day; invalid values and unknown query fields receive 422.
 Hour starts_at = as_of - 1 hour; ends_at = as_of. Business-day starts_at is the
@@ -114,7 +117,7 @@ OutletSummary: `{ outlet_id, name, time_zone }`. Product:
 `{ product_id, sku, name, unit_price_minor }` (seeded catalogue).
 OutletCard: `{ outlet, settings, as_of, window, metrics, series, top_products,
 today_plan }`. Metrics: net revenue, receipt count, numeric average check. Series:
-`[{ starts_at, ends_at, metrics }]`; fixed five-minute hour / hourly day bins,
+`[{ starts_at, ends_at, metrics }]`; fixed UTC five-minute hour / hourly local-day bins,
 clipped to selected bounds and distinguished by UTC during DST. Top products:
 `[{ product_id, name, net_quantity, net_revenue_minor }]`, top ten by net revenue
 then product_id. Today plan: `{ local_date, daily_plan_minor, net_revenue_minor,
@@ -123,7 +126,7 @@ AlertEpisode: `{ episode_id, outlet_id, kind: "stale" or "behind_plan",
 local_date, opened_at, resolved_at, facts }`; local_date null for stale.
 Facts capture threshold, observed values and responsible recipient at opening.
 
-## Required behavior (later implementation)
+## Required backend behavior
 
 One receipt = one sale; revenue derives from its lines. Sale line amount must
 exactly equal quantity × unit price, otherwise 422. Returns derive amount from
@@ -154,3 +157,27 @@ message are captured, with a stable Message-ID across retries. SMTP delivery is
 at least once: a crash after SMTP acceptance but before marking sent can cause a
 duplicate. No automatic second job for a continuous episode. No auth or catalogue
 CRUD in the one-day scope; deploy-access controls remain later work.
+
+## Backend operations
+
+STALE_TIMEOUT_SECONDS defaults to 300 (stale at or beyond the timeout).
+ALERT_EVALUATION_INTERVAL_MS defaults to 5000. Evaluation locks each outlet using
+the same order as ingestion, persists one episode and one notification atomically,
+and requests a coalesced ranking refresh only after commit. Both sale and return
+acceptance resolve stale episodes; retries and rejected transactions do not.
+Midday catch-up assesses every unassessed civil date since activation using data
+then available. Assessment time is persisted separately from its civil-noon
+cutoff. Historical behind-plan incidents start at their cutoff and are resolved
+at that day's next local midnight; their captured notification remains deliverable.
+Both passing and failing assessments are permanent.
+
+SMTP_HOST/SMTP_PORT target Mailpit (defaults 127.0.0.1:1025); SMTP_FROM defaults
+to alerts@example.com. OUTBOX_POLL_INTERVAL_MS defaults to 5000 and
+OUTBOX_RETRY_DELAY_MS to 1000. Failed sends persist attempts/next_attempt_at and
+retry exponentially, capped at five minutes, without generating another job or
+Message-ID. Successful jobs are marked sent and not automatically resent.
+A PostgreSQL session advisory lock permits only one sending worker at a time,
+including overlapping processes; no lease expiry or persistent sending state.
+SMTP is plain local SMTP for the agreed Mailpit infrastructure. Process failure
+after SMTP accepts but before the sent write can deliver a duplicate with the
+same Message-ID. The backend does not claim exactly-once email delivery.

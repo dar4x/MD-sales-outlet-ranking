@@ -2,6 +2,7 @@
 import { Module } from '@nestjs/common';
 
 /* Internal deps */
+import { NotificationsModule } from './notifications/notifications.module.js';
 import { AlertsModule } from './alerts/alerts.module.js';
 import { ApplicationConfigModule } from './config/application-config.module.js';
 import { DatabaseModule } from './database/database.module.js';
@@ -23,6 +24,7 @@ import { RealtimeModule } from './realtime/realtime.module.js';
     ProductsModule,
     OutletsModule,
     AlertsModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

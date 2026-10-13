@@ -1,6 +1,7 @@
 /* External deps */
 import { plainToInstance, Type } from 'class-transformer';
 import {
+  IsEmail,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -12,6 +13,20 @@ import {
 } from 'class-validator';
 
 export class EnvironmentVariables {
+  @IsString() @IsNotEmpty() SMTP_HOST: string = '127.0.0.1';
+  @Type(() => Number) @IsInt() @Min(1) @Max(65535) SMTP_PORT: number = 1025;
+  @IsEmail() SMTP_FROM: string = 'alerts@example.com';
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  OUTBOX_POLL_INTERVAL_MS: number = 5000;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(300000)
+  OUTBOX_RETRY_DELAY_MS: number = 1000;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)
