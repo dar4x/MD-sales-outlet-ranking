@@ -140,3 +140,22 @@ await it('clears the periodic tick on shutdown', async () => {
   await delay(80);
   assert.equal(calls, before);
 });
+
+await it('does not postpone a queued refresh forever when the timer interval is shorter than coalescing', async () => {
+  let calls = 0;
+  const refresh = new CoalescedRankingRefresh(
+    async () => {
+      calls += 1;
+    },
+    40,
+    (error) => assert.fail(String(error)),
+    10,
+  );
+  try {
+    refresh.onModuleInit();
+    await delay(160);
+    assert.ok(calls > 0);
+  } finally {
+    refresh.onModuleDestroy();
+  }
+});

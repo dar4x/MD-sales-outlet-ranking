@@ -17,7 +17,10 @@ export class CoalescedRankingRefresh implements RankingRefreshRequester {
 
   onModuleInit(): void {
     if (this.intervalMs !== undefined && !this.stopped) {
-      this.interval = setInterval(() => this.request(), this.intervalMs);
+      this.interval = setInterval(() => {
+        // A timer tick must not keep postponing an already queued event refresh.
+        if (this.timer === undefined) this.request();
+      }, this.intervalMs);
     }
   }
 
