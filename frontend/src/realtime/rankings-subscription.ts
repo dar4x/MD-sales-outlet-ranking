@@ -16,7 +16,9 @@ export function subscribeToRankings(
   const socket = createClient();
   let active = true;
   let connection = 0;
+  let snapshotTimeout: ReturnType<typeof setTimeout> | undefined;
   const unavailable = (message: string): void => {
+    clearTimeout(snapshotTimeout);
     if (active) update({ status: 'disconnected', message });
   };
   const handleConnect = (): void => {
@@ -25,6 +27,12 @@ export function subscribeToRankings(
       status: 'connecting',
       message: 'Waiting for a live ranking snapshot…',
     });
+    clearTimeout(snapshotTimeout);
+    snapshotTimeout = setTimeout(() => {
+      unavailable(
+        'No live ranking snapshot received. Use Refresh rankings to retry.',
+      );
+    }, 10_000);
     socket
       .timeout(5000)
       .emit(
@@ -57,6 +65,7 @@ export function subscribeToRankings(
       return;
     }
     if (payload.window !== window) return;
+    clearTimeout(snapshotTimeout);
     receive(payload);
     update({ status: 'live', message: 'Live updates connected.' });
   };
@@ -79,6 +88,7 @@ export function subscribeToRankings(
   return () => {
     active = false;
     ++connection;
+    clearTimeout(snapshotTimeout);
     if (socket.connected) socket.emit('rankings.unsubscribe', {}, () => {});
     socket.off('connect', handleConnect);
     socket.off('rankings.snapshot', handleSnapshot);

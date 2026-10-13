@@ -135,7 +135,7 @@ test('HTTP client uses the configured rankings URL, window and abort signal', as
   context.mock.method(globalThis, 'fetch', async (url, options) => {
     assert.equal(
       url.toString(),
-      `${import.meta.env?.VITE_API_URL ?? 'http://localhost:3000/api'}/rankings?window=hour`,
+      `${vite.config.env.VITE_API_URL.replace(/\/+$/, '')}/rankings?window=hour`,
     );
     assert.equal(options.headers.Accept, 'application/json');
     requestSignal = options.signal;
@@ -248,6 +248,24 @@ class FakeSocket extends EventEmitter {
     super.emit('disconnect');
   }
 }
+
+test('shows an HTTP fallback when subscription succeeds but no initial snapshot arrives', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  const socket = new FakeSocket();
+  const states = [];
+  const cleanup = subscribeToRankings(
+    'hour',
+    () => {},
+    (value) => states.push(value),
+    () => socket,
+  );
+  await Promise.resolve();
+  socket.acknowledgements[0](null, { ok: true, window: 'hour' });
+  context.mock.timers.tick(10_000);
+  assert.equal(states.at(-1).status, 'disconnected');
+  assert.match(states.at(-1).message, /No live ranking snapshot/);
+  cleanup();
+});
 
 test('subscribes on connect/reconnect, filters windows and cleans up named listeners', async () => {
   const socket = new FakeSocket();
