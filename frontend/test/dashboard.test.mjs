@@ -204,11 +204,14 @@ test('ranking table displays money, counts, movement and flags; handles empty da
     '<td>2</td>',
     'Up 2',
     'Leader',
-    '<td>Yes</td>',
-    '<td>No</td>',
   ]) {
     assert.ok(html.includes(text), text);
   }
+  const cells = [...html.matchAll(/<td(?: [^>]*)?>(.*?)<\/td>/g)].map((match) =>
+    match[1].replace(/<[^>]*>/g, ''),
+  );
+  assert.equal(cells[6], 'Yes');
+  assert.equal(cells[7], 'No');
   const laggard = snapshot({
     rows: [
       {
