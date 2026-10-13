@@ -98,4 +98,16 @@ await describe('Outlet card query', async () => {
       );
     }
   });
+  await it('clips fixed five-minute hour bins at both selected bounds', async () => {
+    const card = (await new PostgresOutletCardQuery(dataSource).get(
+      BISHKEK_OUTLET_ID,
+      'hour',
+      '2026-10-13T06:01:23.456Z',
+    ))!;
+    assert.equal(card.series.length, 13);
+    assert.equal(card.series[0]!.starts_at, '2026-10-13T05:01:23.456Z');
+    assert.equal(card.series[0]!.ends_at, '2026-10-13T05:05:00.000Z');
+    assert.equal(card.series.at(-1)!.starts_at, '2026-10-13T06:00:00.000Z');
+    assert.equal(card.series.at(-1)!.ends_at, '2026-10-13T06:01:23.456Z');
+  });
 });

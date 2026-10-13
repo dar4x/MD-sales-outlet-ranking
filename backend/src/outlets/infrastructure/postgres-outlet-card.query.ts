@@ -28,10 +28,10 @@ export class PostgresOutletCardQuery implements OutletCardQuery {
       ), metrics AS (
         SELECT COALESCE(sum(amount),0) AS net, COALESCE(sum(receipts),0) AS receipts FROM selected
       ), bins AS (
-        SELECT start,LEAST(start + CASE WHEN $2='hour' THEN interval '5 minutes' ELSE interval '1 hour' END,b.as_of) AS finish
-        FROM bounds b CROSS JOIN LATERAL generate_series(b.starts_at,b.as_of,
-          CASE WHEN $2='hour' THEN interval '5 minutes' ELSE interval '1 hour' END) AS start
-        WHERE start<b.as_of
+        SELECT GREATEST(bin_start,b.starts_at) AS start,LEAST(bin_start + CASE WHEN $2='hour' THEN interval '5 minutes' ELSE interval '1 hour' END,b.as_of) AS finish
+        FROM bounds b CROSS JOIN LATERAL generate_series(CASE WHEN $2='hour' THEN date_bin(interval '5 minutes',b.starts_at,timestamptz '1970-01-01 00:00:00Z') ELSE b.starts_at END,b.as_of,
+          CASE WHEN $2='hour' THEN interval '5 minutes' ELSE interval '1 hour' END) AS bin_start
+        WHERE bin_start<b.as_of
       ), bucket_metrics AS (
         SELECT start,finish,COALESCE(sum(f.amount),0) AS net,COALESCE(sum(f.receipts),0) AS receipts
         FROM bins LEFT JOIN selected f ON f.occurred_at>=start AND f.occurred_at<finish GROUP BY start,finish
