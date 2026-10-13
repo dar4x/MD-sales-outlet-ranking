@@ -19,3 +19,14 @@ export class EventConflictError extends Error {
     this.name = 'EventConflictError';
   }
 }
+
+// The receipt_id already belongs to another accepted event; presentation maps
+// it to HTTP 409.
+export class ReceiptConflictError extends Error {
+  readonly code = 'receipt_conflict';
+
+  constructor(receiptId: string) {
+    super(`Receipt ${receiptId} was already accepted with another event.`);
+    this.name = 'ReceiptConflictError';
+  }
+}

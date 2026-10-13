@@ -10,6 +10,7 @@ import { IngestEvent } from '../src/events/application/ingest-event.js';
 import {
   EventConflictError,
   EventValidationError,
+  ReceiptConflictError,
 } from '../src/events/domain/event-errors.js';
 import type { SaleInput } from '../src/events/domain/event.js';
 import type { Clock } from '../src/shared/application/ports/clock.js';
@@ -321,5 +322,86 @@ await describe('IngestEvent', async () => {
     assert.equal(createdCount, 1);
     assert.equal(conflictCount, 9);
     assert.equal(await countLedgerRows(eventId), 1);
+  });
+
+  await it('rejects a receipt_id reused by another event and keeps the first', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const firstSale = buildSale(randomUUID());
+    await ingestEvent.execute(firstSale);
+    const secondSale: SaleInput = {
+      ...buildSale(randomUUID()),
+      receipt_id: firstSale.receipt_id,
+    };
+
+    await assert.rejects(ingestEvent.execute(secondSale), ReceiptConflictError);
+
+    // The rejected event left no ledger row; the first receipt is unchanged.
+    assert.equal(await countLedgerRows(secondSale.event_id), 0);
+    assert.deepEqual(await countReceiptRows(firstSale.receipt_id), {
+      receipts: 1,
+      lines: 2,
+    });
+    const owners: { event_id: string }[] = await dataSource.query(
+      'SELECT event_id FROM sale_receipts WHERE receipt_id = $1',
+      [firstSale.receipt_id],
+    );
+    assert.deepEqual(owners, [{ event_id: firstSale.event_id }]);
+
+    // The first event's retry is still an ordinary duplicate.
+    const retry = await ingestEvent.execute(firstSale);
+    assert.equal(retry.outcome, 'duplicate');
+  });
+
+  await it('accepts one of 10 parallel events sharing a receipt_id', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const receiptId = randomUUID();
+
+    // Different event_ids, so the ledger accepts all of them; only the
+    // receipt_id collides.
+    const sales: SaleInput[] = [];
+    for (let index = 0; index < 10; index += 1) {
+      sales.push({ ...buildSale(randomUUID()), receipt_id: receiptId });
+    }
+    const calls = [];
+    for (const sale of sales) {
+      calls.push(ingestEvent.execute(sale));
+    }
+    const results = await Promise.allSettled(calls);
+
+    let createdCount = 0;
+    let receiptConflictCount = 0;
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value.outcome === 'created') {
+        createdCount += 1;
+      } else if (
+        result.status === 'rejected' &&
+        result.reason instanceof ReceiptConflictError
+      ) {
+        receiptConflictCount += 1;
+      }
+    }
+    assert.equal(createdCount, 1);
+    assert.equal(receiptConflictCount, 9);
+
+    // Losers rolled back their ledger rows: exactly one of the 10 remains.
+    const eventIds: string[] = [];
+    for (const sale of sales) {
+      eventIds.push(sale.event_id);
+    }
+    const ledgerRows: { count: string }[] = await dataSource.query(
+      'SELECT count(*) AS count FROM accepted_events WHERE event_id = ANY($1::uuid[])',
+      [eventIds],
+    );
+    assert.equal(Number(ledgerRows[0]?.count), 1);
+    assert.deepEqual(await countReceiptRows(receiptId), {
+      receipts: 1,
+      lines: 2,
+    });
   });
 });

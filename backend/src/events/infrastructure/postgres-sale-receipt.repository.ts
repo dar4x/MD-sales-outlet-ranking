@@ -8,14 +8,18 @@ import type { SaleReceipt } from '../domain/event.js';
 export class PostgresSaleReceiptRepository implements SaleReceiptRepository {
   constructor(private readonly manager: EntityManager) {}
 
-  // Receipt-ID reuse is not detected yet: a duplicate receipt_id raises a
-  // unique violation that rolls back the whole transaction.
   async insert(receipt: SaleReceipt): Promise<'inserted' | 'receipt_conflict'> {
-    await this.manager.query(
+    // ON CONFLICT instead of catching a unique violation: a failed statement
+    // would abort the transaction, while DO NOTHING keeps it usable and lets
+    // the caller decide. A concurrent insert of the same receipt_id waits
+    // here until the other transaction commits or rolls back.
+    const insertedRows: unknown[] = await this.manager.query(
       `INSERT INTO sale_receipts (
          receipt_id, event_id, outlet_id, occurred_at, gross_amount_minor
        )
-       VALUES ($1, $2, $3, $4, $5)`,
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (receipt_id) DO NOTHING
+       RETURNING receipt_id`,
       [
         receipt.receipt_id,
         receipt.event_id,
@@ -24,6 +28,9 @@ export class PostgresSaleReceiptRepository implements SaleReceiptRepository {
         receipt.gross_amount_minor.toString(),
       ],
     );
+    if (insertedRows.length === 0) {
+      return 'receipt_conflict';
+    }
 
     // One INSERT per line keeps the SQL plain; receipts have few lines.
     for (const line of receipt.lines) {

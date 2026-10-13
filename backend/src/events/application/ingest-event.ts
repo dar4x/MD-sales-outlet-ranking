@@ -2,7 +2,10 @@
 import type { Clock } from '../../shared/application/ports/clock.js';
 import type { TransactionRunner } from '../../shared/application/ports/transaction-runner.js';
 import { createSaleReceipt } from '../domain/create-sale-receipt.js';
-import { EventConflictError } from '../domain/event-errors.js';
+import {
+  EventConflictError,
+  ReceiptConflictError,
+} from '../domain/event-errors.js';
 import type { Acceptance, SaleInput } from '../domain/event.js';
 import { validateSale } from '../domain/validate-sale.js';
 import { canonicalizeSale, hashPayload } from './canonical-event.js';
@@ -48,7 +51,12 @@ export class IngestEvent {
       if (insertResult === 'inserted') {
         // Same transaction as the ledger row: if the receipt or any line
         // fails, the accepted event is rolled back too.
-        await ports.receipts.insert(receipt);
+        const receiptResult = await ports.receipts.insert(receipt);
+        if (receiptResult === 'receipt_conflict') {
+          // Throwing rolls back the ledger row inserted just above, so the
+          // rejected event leaves nothing behind.
+          throw new ReceiptConflictError(sale.receipt_id);
+        }
         return { outcome: 'created', acceptance };
       }
 
