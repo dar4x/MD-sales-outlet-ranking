@@ -856,4 +856,36 @@ await describe('IngestEvent', async () => {
     ).find(sale.event_id);
     assert.equal(stored?.acceptance.amount_minor, 9223372036854775807n);
   });
+  await it('accepts one event and conflicts the same ID at another outlet in parallel', async () => {
+    const ingest = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const eventId = randomUUID();
+    const first = buildSale(eventId);
+    const second = { ...buildSale(eventId), outlet_id: ALMATY_OUTLET_ID };
+    const results = await Promise.allSettled([
+      ingest.execute(first),
+      ingest.execute(second),
+    ]);
+    const created = results.filter(
+      (result) =>
+        result.status === 'fulfilled' && result.value.outcome === 'created',
+    );
+    const conflicts = results.filter(
+      (result) =>
+        result.status === 'rejected' &&
+        result.reason instanceof EventConflictError,
+    );
+    assert.equal(created.length, 1);
+    assert.equal(conflicts.length, 1);
+    assert.equal(await countLedgerRows(eventId), 1);
+    for (const [index, sale] of [first, second].entries()) {
+      const won = results[index]?.status === 'fulfilled';
+      assert.deepEqual(await countReceiptRows(sale.receipt_id), {
+        receipts: won ? 1 : 0,
+        lines: won ? 2 : 0,
+      });
+    }
+  });
 });
