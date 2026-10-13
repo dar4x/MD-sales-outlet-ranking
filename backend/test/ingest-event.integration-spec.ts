@@ -14,6 +14,10 @@ import {
 } from '../src/events/domain/event-errors.js';
 import type { SaleInput } from '../src/events/domain/event.js';
 import type { Clock } from '../src/shared/application/ports/clock.js';
+import type {
+  TransactionPorts,
+  TransactionRunner,
+} from '../src/shared/application/ports/transaction-runner.js';
 import { PostgresTransactionRunner } from '../src/shared/infrastructure/postgres-transaction-runner.js';
 import {
   ALMATY_OUTLET_ID,
@@ -80,6 +84,34 @@ async function countReceiptRows(
     [receiptId],
   );
   return { receipts: Number(rows[0]?.receipts), lines: Number(rows[0]?.lines) };
+}
+
+// Wraps the real runner: the receipt and its lines are really inserted, then
+// an error is thrown inside the same transaction, as if a later step failed.
+class FailAfterReceiptRunner implements TransactionRunner {
+  constructor(private readonly inner: PostgresTransactionRunner) {}
+
+  run<Result>(
+    operation: (ports: TransactionPorts) => Promise<Result>,
+  ): Promise<Result> {
+    return this.inner.run((ports) => {
+      const failingPorts: TransactionPorts = {
+        ...ports,
+        receipts: {
+          insert: async (receipt) => {
+            await ports.receipts.insert(receipt);
+            throw new Error('Simulated failure after receipt insert.');
+          },
+        },
+      };
+      return operation(failingPorts);
+    });
+  }
+}
+
+function assertValidationCode(expectedCode: string) {
+  return (error: unknown): boolean =>
+    error instanceof EventValidationError && error.code === expectedCode;
 }
 
 await describe('IngestEvent', async () => {
@@ -166,17 +198,14 @@ await describe('IngestEvent', async () => {
     ]);
   });
 
-  await it('rolls back the accepted event when a line cannot be stored', async () => {
+  await it('rolls back the event, receipt and lines when a later step fails', async () => {
     const ingestEvent = new IngestEvent(
-      new PostgresTransactionRunner(dataSource),
+      new FailAfterReceiptRunner(new PostgresTransactionRunner(dataSource)),
       new FakeClock(),
     );
     const sale = buildSale(randomUUID());
-    // The second line references a product that is not seeded, so its
-    // INSERT fails after the ledger row and the receipt row were written.
-    sale.lines[1] = { ...sale.lines[1]!, product_id: randomUUID() };
 
-    await assert.rejects(ingestEvent.execute(sale), /foreign key constraint/);
+    await assert.rejects(ingestEvent.execute(sale), /failure after receipt/);
 
     assert.equal(await countLedgerRows(sale.event_id), 0);
     assert.deepEqual(await countReceiptRows(sale.receipt_id), {
@@ -405,6 +434,119 @@ await describe('IngestEvent', async () => {
     });
   });
 
+  await it('rejects an unknown outlet and stores nothing', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const sale: SaleInput = {
+      ...buildSale(randomUUID()),
+      outlet_id: randomUUID(),
+    };
+
+    await assert.rejects(
+      ingestEvent.execute(sale),
+      assertValidationCode('unknown_outlet'),
+    );
+    assert.equal(await countLedgerRows(sale.event_id), 0);
+    assert.deepEqual(await countReceiptRows(sale.receipt_id), {
+      receipts: 0,
+      lines: 0,
+    });
+  });
+
+  await it('rejects an unknown product on a later line and stores nothing', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const sale = buildSale(randomUUID());
+    const unknownProductId = randomUUID();
+    // First line is valid; only the second line has an unknown product.
+    sale.lines[1] = { ...sale.lines[1]!, product_id: unknownProductId };
+
+    await assert.rejects(ingestEvent.execute(sale), (error: unknown) => {
+      return (
+        assertValidationCode('unknown_product')(error) &&
+        error instanceof Error &&
+        error.message.includes(sale.lines[1]!.sale_line_id) &&
+        error.message.includes(unknownProductId)
+      );
+    });
+    assert.equal(await countLedgerRows(sale.event_id), 0);
+    assert.deepEqual(await countReceiptRows(sale.receipt_id), {
+      receipts: 0,
+      lines: 0,
+    });
+  });
+
+  await it('reports the first unknown product when several lines are unknown', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const sale = buildSale(randomUUID());
+    const firstUnknownId = randomUUID();
+    sale.lines[0] = { ...sale.lines[0]!, product_id: firstUnknownId };
+    sale.lines[1] = { ...sale.lines[1]!, product_id: randomUUID() };
+
+    await assert.rejects(ingestEvent.execute(sale), (error: unknown) => {
+      return (
+        assertValidationCode('unknown_product')(error) &&
+        error instanceof Error &&
+        error.message.includes(firstUnknownId)
+      );
+    });
+    assert.equal(await countLedgerRows(sale.event_id), 0);
+  });
+
+  await it('accepts valid and rejects unknown-product events in parallel', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+
+    // Same outlet for all 10, so they also queue on the outlet lock.
+    const sales: SaleInput[] = [];
+    for (let index = 0; index < 10; index += 1) {
+      const sale = buildSale(randomUUID());
+      if (index % 2 === 1) {
+        sale.lines[1] = { ...sale.lines[1]!, product_id: randomUUID() };
+      }
+      sales.push(sale);
+    }
+    const calls = [];
+    for (const sale of sales) {
+      calls.push(ingestEvent.execute(sale));
+    }
+    const results = await Promise.allSettled(calls);
+
+    let createdCount = 0;
+    let unknownProductCount = 0;
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value.outcome === 'created') {
+        createdCount += 1;
+      } else if (
+        result.status === 'rejected' &&
+        assertValidationCode('unknown_product')(result.reason)
+      ) {
+        unknownProductCount += 1;
+      }
+    }
+    assert.equal(createdCount, 5);
+    assert.equal(unknownProductCount, 5);
+
+    for (let index = 0; index < sales.length; index += 1) {
+      const expectedRows = index % 2 === 0 ? 1 : 0;
+      const sale = sales[index]!;
+      assert.equal(await countLedgerRows(sale.event_id), expectedRows);
+      assert.deepEqual(await countReceiptRows(sale.receipt_id), {
+        receipts: expectedRows,
+        lines: expectedRows * 2,
+      });
+    }
+  });
+
   await it('stores the largest safe integer quantity exactly', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
@@ -425,5 +567,44 @@ await describe('IngestEvent', async () => {
       [sale.receipt_id, sale.lines[1].sale_line_id],
     );
     assert.deepEqual(rows, [{ quantity: '9007199254740991' }]);
+  });
+
+  await it('returns 409 for a known event_id changed to an unknown outlet', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const sale = buildSale(randomUUID());
+    await ingestEvent.execute(sale);
+    const changedSale: SaleInput = { ...sale, outlet_id: randomUUID() };
+
+    await assert.rejects(ingestEvent.execute(changedSale), EventConflictError);
+    assert.equal(await countLedgerRows(sale.event_id), 1);
+    assert.deepEqual(await countReceiptRows(sale.receipt_id), {
+      receipts: 1,
+      lines: 2,
+    });
+  });
+
+  await it('returns 409 for a known event_id changed to an unknown product', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const sale = buildSale(randomUUID());
+    await ingestEvent.execute(sale);
+    const changedSale = buildSale(sale.event_id);
+    changedSale.receipt_id = sale.receipt_id;
+    changedSale.lines[1] = {
+      ...changedSale.lines[1]!,
+      product_id: randomUUID(),
+    };
+
+    await assert.rejects(ingestEvent.execute(changedSale), EventConflictError);
+    assert.equal(await countLedgerRows(sale.event_id), 1);
+    assert.deepEqual(await countReceiptRows(sale.receipt_id), {
+      receipts: 1,
+      lines: 2,
+    });
   });
 });

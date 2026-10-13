@@ -4,6 +4,7 @@ import type { TransactionRunner } from '../../shared/application/ports/transacti
 import { createSaleReceipt } from '../domain/create-sale-receipt.js';
 import {
   EventConflictError,
+  EventValidationError,
   ReceiptConflictError,
 } from '../domain/event-errors.js';
 import type { Acceptance, SaleInput } from '../domain/event.js';
@@ -39,8 +40,26 @@ export class IngestEvent {
     };
 
     return this.transactions.run(async (ports) => {
-      // Insert first, never SELECT-then-INSERT: the event_id primary key
-      // decides which of several concurrent requests is the new one.
+      // The outlet row is locked first, so every event of one outlet takes
+      // locks in the same order: outlet, then ledger, then receipt.
+      const outletExists = await ports.activity.lock(sale.outlet_id);
+      if (!outletExists) {
+        // The ledger has a foreign key to outlets, so no insert is possible.
+        // Reading it only picks the error code: the contract says a changed
+        // payload for a known event_id is 409. Nothing is written after
+        // this read, so it cannot race another insert.
+        const storedForUnknownOutlet = await ports.events.find(sale.event_id);
+        if (storedForUnknownOutlet !== null) {
+          throw new EventConflictError(sale.event_id);
+        }
+        throw new EventValidationError(
+          'unknown_outlet',
+          `Outlet ${sale.outlet_id} does not exist.`,
+        );
+      }
+
+      // Never SELECT-then-INSERT: the event_id primary key decides which of
+      // several concurrent requests is the new one.
       const insertResult = await ports.events.insert({
         event_id: sale.event_id,
         canonical_payload: canonicalPayload,
@@ -48,31 +67,42 @@ export class IngestEvent {
         input: sale,
         acceptance,
       });
-      if (insertResult === 'inserted') {
-        // Same transaction as the ledger row: if the receipt or any line
-        // fails, the accepted event is rolled back too.
-        const receiptResult = await ports.receipts.insert(receipt);
-        if (receiptResult === 'receipt_conflict') {
-          // Throwing rolls back the ledger row inserted just above, so the
-          // rejected event leaves nothing behind.
-          throw new ReceiptConflictError(sale.receipt_id);
+      if (insertResult === 'event_conflict') {
+        const stored = await ports.events.find(sale.event_id);
+        if (stored === null) {
+          // The insert just hit a conflict on this key, so the row must exist.
+          throw new Error(`Ledger row for event ${sale.event_id} not found.`);
         }
-        return { outcome: 'created', acceptance };
+        if (stored.payload_hash !== payloadHash) {
+          throw new EventConflictError(sale.event_id);
+        }
+        // A retry returns the original acceptance, including its accepted_at.
+        return {
+          outcome: 'duplicate',
+          acceptance: { ...stored.acceptance, duplicate: true },
+        };
       }
 
-      const stored = await ports.events.find(sale.event_id);
-      if (stored === null) {
-        // The insert just hit a conflict on this key, so the row must exist.
-        throw new Error(`Ledger row for event ${sale.event_id} not found.`);
+      // Products are checked only for a new event, after the identity check,
+      // so a changed payload for a known event_id stays 409. Throwing here
+      // rolls back the ledger row inserted above.
+      for (const line of sale.lines) {
+        const product = await ports.products.find(line.product_id);
+        if (product === null) {
+          throw new EventValidationError(
+            'unknown_product',
+            `Line ${line.sale_line_id} refers to unknown product ${line.product_id}.`,
+          );
+        }
       }
-      if (stored.payload_hash !== payloadHash) {
-        throw new EventConflictError(sale.event_id);
+
+      // Same transaction as the ledger row: if the receipt or any line
+      // fails, the accepted event is rolled back too.
+      const receiptResult = await ports.receipts.insert(receipt);
+      if (receiptResult === 'receipt_conflict') {
+        throw new ReceiptConflictError(sale.receipt_id);
       }
-      // A retry returns the original acceptance, including its accepted_at.
-      return {
-        outcome: 'duplicate',
-        acceptance: { ...stored.acceptance, duplicate: true },
-      };
+      return { outcome: 'created', acceptance };
     });
   }
 }
