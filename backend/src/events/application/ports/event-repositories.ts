@@ -1,3 +1,4 @@
+/* Internal deps */
 import type {
   Identifier,
   UtcTimestamp,
@@ -6,9 +7,10 @@ import type {
   AcceptedEvent,
   ReturnEvent,
   SaleReceipt,
+  StoredEvent,
 } from '../../domain/event.js';
 export interface EventLedgerRepository {
-  find(eventId: Identifier): Promise<AcceptedEvent | null>;
+  find(eventId: Identifier): Promise<StoredEvent | null>;
   insert(event: AcceptedEvent): Promise<'inserted' | 'event_conflict'>;
 }
 export interface SaleReceiptRepository {

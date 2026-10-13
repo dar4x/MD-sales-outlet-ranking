@@ -67,3 +67,9 @@ export interface AcceptedEvent {
   input: EventInput;
   acceptance: Acceptance;
 }
+// What a retry needs from the ledger: the hash to compare and the original
+// acceptance to return. The input itself is not read back.
+export interface StoredEvent {
+  payload_hash: string;
+  acceptance: Acceptance;
+}
