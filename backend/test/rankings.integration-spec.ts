@@ -161,4 +161,57 @@ await describe('PostgresRankingQuery', async () => {
       assert.equal(row.receipt_count, 2);
     }
   });
+  await it('compares preceding hour with rounded basis points and exact boundaries', async () => {
+    await sale(BISHKEK_OUTLET_ID, '2026-10-13T04:00:00Z', 3n);
+    await sale(BISHKEK_OUTLET_ID, '2026-10-13T05:00:00Z', 4n);
+    await sale(BISHKEK_OUTLET_ID, '2026-10-13T03:59:59.999Z', 999n);
+    const snapshot = await query.get('hour', asOf);
+    const row = snapshot.rows.find(
+      (row) => row.outlet_id === BISHKEK_OUTLET_ID,
+    )!;
+    assert.equal(row.previous_revenue_minor, '3');
+    assert.equal(row.dynamics_bps, 3333);
+    assert.equal(row.is_leader, true);
+    assert.equal(snapshot.rows.at(-1)!.is_laggard, true);
+    for (const empty of snapshot.rows.slice(1)) {
+      assert.equal(empty.previous_revenue_minor, '0');
+      assert.equal(empty.dynamics_bps, null);
+      assert.equal(empty.stale, false);
+      assert.equal(empty.behind_plan, false);
+    }
+  });
+  await it('has no leaders or laggards when all revenues are equal', async () => {
+    const snapshot = await query.get('hour', asOf);
+    for (const row of snapshot.rows) {
+      assert.equal(row.is_leader, false);
+      assert.equal(row.is_laggard, false);
+    }
+    const outlets: { outlet_id: string }[] = await dataSource.query(
+      'SELECT outlet_id FROM outlets',
+    );
+    for (const outlet of outlets)
+      await sale(outlet.outlet_id, '2026-10-13T05:30:00Z', 10n);
+    const equal = await query.get('hour', asOf);
+    assert.ok(equal.rows.every((row) => !row.is_leader && !row.is_laggard));
+  });
+  await it('has no leader or laggard for a single outlet', async () => {
+    await sale(BISHKEK_OUTLET_ID, '2026-10-13T05:30:00Z', 100n);
+    // A transaction-local view limits this read without deleting catalogue data.
+    const runner = dataSource.createQueryRunner();
+    await runner.connect();
+    await runner.startTransaction();
+    try {
+      await runner.query(
+        "CREATE TEMP VIEW outlets AS SELECT * FROM public.outlets WHERE outlet_id = '00000000-0000-4000-8000-000000000001'",
+      );
+      const isolatedQuery = new PostgresRankingQuery(runner.manager, 'KGS');
+      const snapshot = await isolatedQuery.get('hour', asOf);
+      assert.equal(snapshot.rows.length, 1);
+      assert.equal(snapshot.rows[0]!.is_leader, false);
+      assert.equal(snapshot.rows[0]!.is_laggard, false);
+    } finally {
+      await runner.rollbackTransaction();
+      await runner.release();
+    }
+  });
 });

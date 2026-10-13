@@ -15,7 +15,7 @@ import type {
 
 export class PostgresRankingQuery implements RankingQuery {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly dataSource: Pick<DataSource, 'query'>,
     private readonly currency: string,
   ) {}
 
@@ -43,16 +43,26 @@ export class PostgresRankingQuery implements RankingQuery {
           -- Half-open bounds include the start and exclude the next window.
           AND s.occurred_at >= b.starts_at AND s.occurred_at < b.as_of
         GROUP BY b.outlet_id
+      ), previous_totals AS (
+        SELECT b.outlet_id, COALESCE(sum(s.gross_amount_minor), 0) AS revenue
+        FROM bounds b LEFT JOIN sale_receipts s ON s.outlet_id = b.outlet_id
+          AND $1 = 'hour'
+          AND s.occurred_at >= b.as_of - interval '2 hours'
+          AND s.occurred_at < b.as_of - interval '1 hour'
+        GROUP BY b.outlet_id
       ), return_totals AS (
         -- Return ingestion is not implemented yet.
         SELECT NULL::uuid AS outlet_id, 0::numeric AS revenue WHERE false
       ), metrics AS (
         SELECT b.*, s.revenue - COALESCE(r.revenue, 0) AS net,
-          s.receipt_count
+          s.receipt_count, p.revenue AS previous
         FROM bounds b JOIN sale_totals s USING (outlet_id)
+        JOIN previous_totals p USING (outlet_id)
         LEFT JOIN return_totals r USING (outlet_id)
       ), ranked AS (
-        SELECT *, row_number() OVER (ORDER BY net DESC, outlet_id ASC)::integer AS rank
+        SELECT *, row_number() OVER (ORDER BY net DESC, outlet_id ASC)::integer AS rank,
+          count(*) OVER () AS outlet_count,
+          min(net) OVER () AS minimum_net, max(net) OVER () AS maximum_net
         FROM metrics
       )
       SELECT i.as_of, COALESCE((
@@ -62,8 +72,11 @@ export class PostgresRankingQuery implements RankingQuery {
           'starts_at', to_char(starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
           'ends_at', to_char(as_of AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
           'rank', rank, 'net_revenue_minor', net::text, 'receipt_count', receipt_count,
-          'average_check_minor', round(net / NULLIF(receipt_count, 0))::text, 'previous_revenue_minor', NULL,
-          'dynamics_bps', NULL, 'is_leader', false, 'is_laggard', false,
+          'average_check_minor', round(net / NULLIF(receipt_count, 0))::text, 'previous_revenue_minor', CASE WHEN $1 = 'hour' THEN previous::text ELSE NULL END,
+          'dynamics_bps', CASE WHEN $1 = 'hour' AND previous > 0
+            THEN round((net - previous) * 10000 / previous) ELSE NULL END,
+          'is_leader', outlet_count > 1 AND maximum_net > minimum_net AND rank = 1,
+          'is_laggard', outlet_count > 1 AND maximum_net > minimum_net AND rank = outlet_count,
           'stale', false, 'behind_plan', false
         ) ORDER BY rank) FROM ranked
       ), '[]'::jsonb) AS rows FROM instant i
