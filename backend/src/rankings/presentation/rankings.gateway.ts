@@ -10,10 +10,13 @@ import {
 } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
 /* Internal deps */
+import type { RankingPublisher } from '../application/ports/ranking-ports.js';
+import type { RankingSnapshot } from '../application/read-models/ranking.js';
+import type { RankingWindow } from '../../shared/domain/value-types.js';
 import { GetRankings } from '../application/get-rankings.js';
 
 @WebSocketGateway()
-export class RankingsGateway {
+export class RankingsGateway implements RankingPublisher {
   @WebSocketServer()
   server!: Server;
   private readonly logger = new Logger(RankingsGateway.name);
@@ -65,5 +68,20 @@ export class RankingsGateway {
     void client.leave('rankings:hour');
     void client.leave('rankings:business_day');
     return { ok: true };
+  }
+  subscribedWindows(): RankingWindow[] {
+    const windows: RankingWindow[] = [];
+    for (const window of ['hour', 'business_day'] as const) {
+      if (this.server?.sockets.adapter.rooms.get('rankings:' + window)?.size) {
+        windows.push(window);
+      }
+    }
+    return windows;
+  }
+
+  async publish(snapshot: RankingSnapshot): Promise<void> {
+    this.server
+      .to('rankings:' + snapshot.window)
+      .emit('rankings.snapshot', snapshot);
   }
 }
