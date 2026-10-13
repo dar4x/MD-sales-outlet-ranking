@@ -47,7 +47,11 @@ export function OutletCardView({ card }: { card: OutletCard }) {
               {card.top_products.map((product) => (
                 <tr key={product.product_id}>
                   <th scope="row">{product.name}</th>
-                  <td>{product.net_quantity}</td>
+                  <td>
+                    {Number.isSafeInteger(product.net_quantity)
+                      ? product.net_quantity
+                      : 'Outside safe display range'}
+                  </td>
                   <td>{product.net_revenue_minor}</td>
                 </tr>
               ))}

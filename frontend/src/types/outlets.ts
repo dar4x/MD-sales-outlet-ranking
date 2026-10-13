@@ -111,7 +111,8 @@ function isTopProduct(value: unknown): value is TopProduct {
     isRecord(value) &&
     isString(value.product_id) &&
     isString(value.name) &&
-    isSafeInteger(value.net_quantity) &&
+    typeof value.net_quantity === 'number' &&
+    Number.isInteger(value.net_quantity) &&
     isMoney(value.net_revenue_minor)
   );
 }

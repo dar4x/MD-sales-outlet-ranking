@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { getOutletCard, getOutlets } from '../api/outlets';
 import { useApiResource } from '../api/useApiResource';
 import { OutletCardView } from '../components/OutletCardView';
+import { OutletSettingsPanel } from '../components/OutletSettingsPanel';
 import { isRankingWindow, rankingWindows } from '../types/rankings';
 import type { RankingWindow } from '../types/rankings';
 
@@ -33,6 +34,7 @@ export function OutletsPage() {
   const { data: outlets, loading, error, reload } = useApiResource(getOutlets);
   const [selected, setSelected] = useState('');
   const [window, setWindow] = useState<RankingWindow>('business_day');
+  const [revision, setRevision] = useState(0);
   return (
     <main>
       <h1>Outlets</h1>
@@ -76,11 +78,18 @@ export function OutletsPage() {
               ))}
             </select>
             {selected && (
-              <OutletCardPanel
-                key={`${selected}/${window}`}
-                id={selected}
-                window={window}
-              />
+              <>
+                <OutletCardPanel
+                  key={`${selected}/${window}/${revision}`}
+                  id={selected}
+                  window={window}
+                />
+                <OutletSettingsPanel
+                  key={selected}
+                  id={selected}
+                  onSaved={() => setRevision((value) => value + 1)}
+                />
+              </>
             )}
           </>
         ))}
