@@ -57,13 +57,17 @@ await describe('Outlet details and settings HTTP', async () => {
         url + '/api/outlets/' + BISHKEK_OUTLET_ID + '/card?window=hour',
       )
     ).json()) as {
+      as_of: string;
       settings: Record<string, unknown>;
       today_plan: Record<string, unknown>;
       series: unknown[];
     };
     assert.deepEqual(card.settings, settings);
     assert.equal(card.today_plan.daily_plan_minor, '9007199254740993');
-    assert.equal(card.series.length, 12);
+    assert.equal(
+      card.series.length,
+      Date.parse(card.as_of) % 300000 === 0 ? 12 : 13,
+    );
   });
   await it('rejects invalid settings and card inputs, and distinguishes absent outlets', async () => {
     for (const body of [
