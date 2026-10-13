@@ -123,3 +123,62 @@ and atomic episode/outbox records give less coupling without redundant handlers.
   --check docs/API_CONTRACT.md docs/DOMAIN_MODEL.md passed. Source scan
   `rg -n 'any|@nestjs|typeorm' backend/src/events backend/src/rankings backend/src/outlets backend/src/products backend/src/alerts backend/src/notifications backend/src/shared`
   found no matches (expected exit 1, not a failed quality check).
+
+## 2026-10-13T14:06:08+06:00 — feature/events-ingestion review fixes
+
+- Stayed on feature/events-ingestion. Existing MYLOG.md edits were present at
+  setup and left untouched/uncommitted. No push, merge, force push, branch deletion
+  or artificial commit dates. git ls-files CLAUDE.md returned no tracked file;
+  the file was also absent locally, so nothing was added or committed for it.
+- Original setup: docker compose up -d --wait passed (PostgreSQL and Mailpit
+  healthy). npm --prefix backend run migration:run failed on existing orphan
+  accepted_events.outlet_id references when adding the outlet FK; the migration
+  transaction rolled back. npm --prefix backend test failed on missing
+  sale_receipts. No original rows were deleted, patched or constraints weakened.
+- Created a separate local review database with
+  `docker compose exec -T postgres sh -c 'createdb -U "$POSTGRES_USER" sales_ranking_fix_review_20261013'`.
+  Applied migrations with
+  `POSTGRES_DB=sales_ranking_fix_review_20261013 npm --prefix backend run migration:run`.
+  Before any source fix or test data, all five new migrations reverted successfully
+  using the same POSTGRES_DB prefix and `npm --prefix backend run migration:revert`
+  five times. Reapplied all five with migration:run successfully. This round-trip
+  used empty business tables; downgrading bigint quantities containing values
+  outside integer range was not attempted. Original database remains blocked.
+- Real unchanged baseline in the migrated review database:
+  `POSTGRES_DB=sales_ranking_fix_review_20261013 npm --prefix backend test`
+  passed 74 tests, zero failures. Infrastructure/database commands required
+  execution outside the sandbox. Root .env was not edited.
+- Parser fixes: non-object/array line elements give 422 invalid_request;
+  timestamp fractions beyond three digits give 422 timestamp_precision;
+  all five UUID fields are lowercased after shape validation and before domain
+  duplicate checks/hash creation. Added unit and HTTP regression tests for nested
+  lines, precision, normalized retry acceptance and case-only duplicate line IDs.
+- Exception filter now sanitizes recognized direct/wrapped connection failures
+  as 503 database_unavailable; other errors delegate to Nest's BaseExceptionFilter.
+  Context7 Nest documentation supplied the existing-filter fallback. HTTP tests
+  inject connection errors and unrelated SQL/application errors, checking sanitized
+  503 and preserved 500 responses. No real PostgreSQL outage was performed.
+- Extracted exactly two private IngestEvent methods: handleRetry and checkProducts.
+  No new classes, files, abstractions, dependencies or isolation override. Added
+  one integration test for the same event_id concurrently at two different outlets:
+  one created, one EventConflictError, one ledger row and no losing receipt/lines.
+- Intermediate tests passed 76, 78, 81, 83 and finally 84 cases as fixes were added.
+  One intermediate lint run failed on two unbound method saves in the HTTP tests;
+  binding the saved method fixed it before the exception-filter commit. Typecheck
+  and subsequent lint/test runs passed. No failed version was committed.
+- Final checks passed: npm --prefix backend run typecheck;
+  rtk proxy npm --prefix backend run lint; npm --prefix backend run format:check;
+  npm --prefix backend run build; and
+  POSTGRES_DB=sales_ranking_fix_review_20261013 npm --prefix backend test
+  (84 tests, zero failures). New API/domain docs passed
+  backend/node_modules/.bin/prettier --check docs/API_CONTRACT.md docs/DOMAIN_MODEL.md;
+  git diff --check passed. Used installed Prettier to format changed source/tests.
+- Updated API_CONTRACT.md: sale-only implemented scope, pending returns with
+  current 422 unsupported_kind, nonnegative acceptance amounts/free sales,
+  millisecond precision, lowercase UUID normalization and sanitized DB failure
+  body. DOMAIN_MODEL.md records matching time/UUID rules. README and architecture
+  layers were not changed; frontend checks were not rerun (frontend unchanged).
+- Deliberately skipped parallel HTTP conflicting-payload coverage and test-data
+  cleanup as requested. Tests retained their records in the separate review DB;
+  no databases were dropped. PostgreSQL and Mailpit remain running for re-review.
+  The exact /status model variant was not accessible or newly asserted.
