@@ -8,7 +8,7 @@ backend/src/
   config/                       env loading and validation
   database/                     shared TypeORM setup and migrations
   health/                       flat controller, service, query, types
-  realtime/                     flat ping/pong gateway
+  realtime/                     shared Socket.IO transport adapter
   <business-feature>/           events, rankings, outlets, alerts, notifications
     domain/                     pure TypeScript types and rules
     application/
@@ -47,7 +47,7 @@ return typed read models instead of forcing rankings through domain entities.
 SQL lives in infrastructure repositories or dedicated query files. TypeORM
 entities stay in infrastructure; explicit migrations control schema changes.
 
-**Keep trivial modules flat.** Health and realtime ping/pong use normal Nest
-controllers/gateways and services; layered business use cases and ports are
+**Keep trivial modules flat.** Health uses a normal Nest controller and service;
+the shared Socket.IO adapter configures transport. Layered business use cases and ports are
 unnecessary. Before each feature branch, state in five lines which use cases and
 ports it adds. Keep functions small, strict types, and tests focused on behavior.

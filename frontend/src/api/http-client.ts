@@ -1,6 +1,3 @@
-import { isPongMessage } from '../types/connections';
-import type { PongMessage } from '../types/connections';
-
 export async function getJson(
   path: string,
   signal: AbortSignal,
@@ -26,14 +23,4 @@ export async function getJson(
   }
 
   return response.json() as Promise<unknown>;
-}
-
-export async function getHttpPing(signal: AbortSignal): Promise<PongMessage> {
-  const payload = await getJson('ping', signal);
-
-  if (!isPongMessage(payload)) {
-    throw new Error('The server returned an unexpected ping response');
-  }
-
-  return payload;
 }

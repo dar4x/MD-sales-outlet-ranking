@@ -11,7 +11,6 @@ import { HealthModule } from './health/health.module.js';
 import { OutletsModule } from './outlets/outlets.module.js';
 import { ProductsModule } from './products/products.module.js';
 import { RankingsModule } from './rankings/rankings.module.js';
-import { RealtimeModule } from './realtime/realtime.module.js';
 
 @Module({
   imports: [
@@ -19,7 +18,6 @@ import { RealtimeModule } from './realtime/realtime.module.js';
     DatabaseModule,
     EventsModule,
     HealthModule,
-    RealtimeModule,
     RankingsModule,
     ProductsModule,
     OutletsModule,

@@ -37,7 +37,6 @@ JSON keeps 400. Unknown fields are rejected.
 | PATCH /api/outlets/:id/settings                     | nonempty `{ daily_plan_minor?, responsible_person? }` | OutletSettings                     | 200, 404, 422                                                                                                                     | UpdateOutletSettings         |
 | GET /api/products                                   | none                                                  | `{ items: Product[] }`             | 200                                                                                                                               | ListProducts                 |
 | GET /api/alerts?active_only=true&outlet_id=UUID     | defaults active only; optional outlet filter          | `{ items: AlertEpisode[] }`        | 200, 422                                                                                                                          | ListAlerts                   |
-| GET /api/ping                                       | none                                                  | `{ message: "pong" }`              | 200                                                                                                                               | existing flat ping service   |
 | GET /api/health                                     | none                                                  | `{ status: "ok", database: "up" }` | 200; existing sanitized error 503                                                                                                 | existing flat health service |
 
 SaleInput: `{ kind: "sale", event_id, receipt_id, outlet_id, occurred_at,
@@ -58,7 +57,6 @@ PATCH uses last write wins for supplied fields; no expected_version or 409.
 | client rankings.subscribe   | `{ window: "hour" or "business_day" }`  | replace this socket's window; ack `{ ok: true, window }` or `{ ok: false, error: { code, message } }`; GetRankings sends fresh snapshot |
 | client rankings.unsubscribe | `{}`                                    | ack `{ ok: true }`; remove subscription                                                                                                 |
 | server rankings.snapshot    | RankingSnapshot                         | PublishRankings; only business push channel, including stale/behind-plan flags                                                          |
-| client ping / server pong   | no ping payload / `{ message: "pong" }` | existing flat gateway                                                                                                                   |
 
 No alerts.* events. Alert list is HTTP only. Each client has at most one ranking
 window: a valid subscribe leaves its old ranking room and joins the new one.
