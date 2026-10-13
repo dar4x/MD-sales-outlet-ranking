@@ -27,7 +27,7 @@ export class PostgresRankingQuery implements RankingQuery {
       await this.dataSource.query(
         `
       WITH instant AS MATERIALIZED (
-        SELECT $1::text AS selected_window, COALESCE($2::timestamptz, clock_timestamp()) AS as_of
+        SELECT $1::text AS selected_window, date_trunc('milliseconds', COALESCE($2::timestamptz, clock_timestamp())) AS as_of
       ), bounds AS (
         SELECT o.*, i.as_of,
           CASE WHEN $1 = 'hour' THEN i.as_of - interval '1 hour'
@@ -51,11 +51,14 @@ export class PostgresRankingQuery implements RankingQuery {
           AND s.occurred_at < b.as_of - interval '1 hour'
         GROUP BY b.outlet_id
       ), return_totals AS (
-        -- Return ingestion is not implemented yet.
-        SELECT NULL::uuid AS outlet_id, 0::numeric AS revenue WHERE false
+        SELECT b.outlet_id,
+          COALESCE(sum(r.amount_minor) FILTER (WHERE r.occurred_at >= b.starts_at AND r.occurred_at < b.as_of),0) AS revenue,
+          COALESCE(sum(r.amount_minor) FILTER (WHERE r.occurred_at >= b.as_of - interval '2 hours' AND r.occurred_at < b.as_of - interval '1 hour'),0) AS previous
+        FROM bounds b LEFT JOIN return_events r ON r.outlet_id = b.outlet_id
+        GROUP BY b.outlet_id
       ), metrics AS (
         SELECT b.*, s.revenue - COALESCE(r.revenue, 0) AS net,
-          s.receipt_count, p.revenue AS previous
+          s.receipt_count, p.revenue - COALESCE(r.previous,0) AS previous
         FROM bounds b JOIN sale_totals s USING (outlet_id)
         JOIN previous_totals p USING (outlet_id)
         LEFT JOIN return_totals r USING (outlet_id)

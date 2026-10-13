@@ -155,11 +155,11 @@ await describe('POST /api/events', async () => {
     assert.equal(json.code, 'line_amount_mismatch');
   });
 
-  await it('returns 422 unsupported_kind for returns', async () => {
+  await it('returns 422 invalid_request for malformed returns', async () => {
     const { status, json } = await postEvent({ kind: 'return' });
 
     assert.equal(status, 422);
-    assert.equal(json.code, 'unsupported_kind');
+    assert.equal(json.code, 'invalid_request');
   });
 
   await it('returns 422 for an unknown outlet or product', async () => {

@@ -3,7 +3,7 @@ import { Body, Controller, Post, Res, UseFilters } from '@nestjs/common';
 
 /* Internal deps */
 import { IngestEvent } from '../application/ingest-event.js';
-import type { SaleInput } from '../domain/event.js';
+import type { EventInput } from '../domain/event.js';
 import { EventErrorsFilter } from './event-errors.filter.js';
 import { ParseSaleEventPipe } from './parse-sale-event.pipe.js';
 
@@ -27,11 +27,11 @@ interface StatusResponse {
 export class EventsController {
   constructor(private readonly ingestEvent: IngestEvent) {}
 
-  // SaleInput is an interface, so the global ValidationPipe skips this
+  // EventInput is an interface, so the global ValidationPipe skips this
   // parameter; ParseSaleEventPipe does all body validation.
   @Post()
   async ingest(
-    @Body(new ParseSaleEventPipe()) sale: SaleInput,
+    @Body(new ParseSaleEventPipe()) sale: EventInput,
     @Res({ passthrough: true }) response: StatusResponse,
   ): Promise<AcceptanceResponse> {
     const result = await this.ingestEvent.execute(sale);

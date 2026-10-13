@@ -1,8 +1,7 @@
 # Planned API contract
 
-Implemented: sale ingestion, product/outlet lists, HTTP and Socket.IO rankings,
-ping/health and Socket.IO ping/pong. Returns and
-all other business routes/events below remain planned. Developer-approved decisions,
+Implemented: sale/return ingestion, product/outlet lists, HTTP and Socket.IO rankings,
+ping/health and Socket.IO ping/pong. Other business routes below remain planned. Developer-approved decisions,
 implemented with AI assistance; independent frontend contracts must not import backend.
 
 ## Encoding and errors
@@ -29,7 +28,7 @@ JSON keeps 400. Unknown fields are rejected.
 
 | Method/path                                         | Request                                               | Response                           | Status                                                                                                                            | Use case                     |
 | --------------------------------------------------- | ----------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| POST /api/events                                    | SaleInput; ReturnInput pending                        | Acceptance                         | 201 new; 200 identical retry; 409 conflicting event/receipt identity; 422 invalid references, quantities, prices or return limits | IngestEvent                  |
+| POST /api/events                                    | SaleInput or ReturnInput                              | Acceptance                         | 201 new; 200 identical retry; 409 conflicting event/receipt identity; 422 invalid references, quantities, prices or return limits | IngestEvent                  |
 | GET /api/rankings?window=hour\|business_day         | default business_day                                  | RankingSnapshot                    | 200, 422                                                                                                                          | GetRankings                  |
 | GET /api/outlets                                    | none                                                  | `{ items: OutletSummary[] }`       | 200                                                                                                                               | ListOutlets                  |
 | GET /api/outlets/:id/card?window=hour\|business_day | default business_day                                  | OutletCard                         | 200, 404, 422                                                                                                                     | GetOutletCard                |
@@ -44,8 +43,6 @@ SaleInput: `{ kind: "sale", event_id, receipt_id, outlet_id, occurred_at,
 lines: [{ sale_line_id, product_id, quantity, unit_price_minor, line_amount_minor }] }`.
 ReturnInput: `{ kind: "return", event_id, outlet_id, occurred_at, sale_receipt_id,
 lines: [{ return_line_id, sale_line_id, quantity }] }`. No return amount is accepted.
-Return ingestion is pending: requests with `kind: "return"` currently receive
-422 `unsupported_kind`; the ReturnInput shape above is the future contract.
 Acceptance: `{ event_id, outlet_id, kind, accepted_at, amount_minor, duplicate }`;
 amount is nonnegative gross sale or derived refund magnitude (free sales may
 produce zero). Retry preserves the
@@ -111,7 +108,7 @@ ends_at = as_of. In both windows local_date is the outlet's local date at as_of.
 Hour previous_revenue_minor covers [as_of - 2 hours, as_of - 1 hour).
 Hour dynamics_bps = round((current - previous) * 10000 / previous) when previous
 is positive, otherwise null. Business-day previous revenue and dynamics are null.
-Returns are not ingested yet; the ranking SQL has an empty return_totals CTE.
+Returns subtract server-calculated refunds at their own occurred_at in both current and previous ranking windows.
 
 OutletSummary: `{ outlet_id, name, time_zone }`. Product:
 `{ product_id, sku, name, unit_price_minor }` (seeded catalogue).

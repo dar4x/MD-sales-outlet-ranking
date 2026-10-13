@@ -66,3 +66,30 @@ export class SaleEventDto {
   @Type(() => SaleLineDto)
   lines!: SaleLineDto[];
 }
+
+export class ReturnLineDto {
+  @IsUUID()
+  return_line_id!: string;
+  @IsUUID()
+  sale_line_id!: string;
+  @IsInt()
+  quantity!: number;
+}
+export class ReturnEventDto {
+  @IsIn(['return'])
+  kind!: 'return';
+  @IsUUID()
+  event_id!: string;
+  @IsUUID()
+  outlet_id!: string;
+  @IsUUID()
+  sale_receipt_id!: string;
+  @IsString()
+  @Matches(TIMESTAMP_WITH_OFFSET_PATTERN)
+  @IsISO8601({ strict: true })
+  occurred_at!: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReturnLineDto)
+  lines!: ReturnLineDto[];
+}
