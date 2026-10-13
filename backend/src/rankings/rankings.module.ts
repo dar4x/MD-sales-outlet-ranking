@@ -7,12 +7,14 @@ import type { EnvironmentVariables } from '../config/environment.validation.js';
 import { DatabaseModule } from '../database/database.module.js';
 import { GetRankings } from './application/get-rankings.js';
 import { PostgresRankingQuery } from './infrastructure/postgres-ranking.query.js';
+import { RankingsGateway } from './presentation/rankings.gateway.js';
 import { RankingsController } from './presentation/rankings.controller.js';
 
 @Module({
   imports: [DatabaseModule],
   controllers: [RankingsController],
   providers: [
+    RankingsGateway,
     {
       provide: GetRankings,
       inject: [DataSource, ConfigService],
