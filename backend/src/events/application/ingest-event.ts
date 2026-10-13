@@ -10,6 +10,8 @@ import {
 import type { Acceptance, SaleInput } from '../domain/event.js';
 import { validateSale } from '../domain/validate-sale.js';
 import { canonicalizeSale, hashPayload } from './canonical-event.js';
+import type { EventLedgerRepository } from './ports/event-repositories.js';
+import type { ProductLookup } from '../../products/application/ports/product-catalogue.js';
 
 export interface IngestEventResult {
   outcome: 'created' | 'duplicate';
@@ -68,33 +70,13 @@ export class IngestEvent {
         acceptance,
       });
       if (insertResult === 'event_conflict') {
-        const stored = await ports.events.find(sale.event_id);
-        if (stored === null) {
-          // The insert just hit a conflict on this key, so the row must exist.
-          throw new Error(`Ledger row for event ${sale.event_id} not found.`);
-        }
-        if (stored.payload_hash !== payloadHash) {
-          throw new EventConflictError(sale.event_id);
-        }
-        // A retry returns the original acceptance, including its accepted_at.
-        return {
-          outcome: 'duplicate',
-          acceptance: { ...stored.acceptance, duplicate: true },
-        };
+        return this.handleRetry(sale.event_id, payloadHash, ports.events);
       }
 
       // Products are checked only for a new event, after the identity check,
       // so a changed payload for a known event_id stays 409. Throwing here
       // rolls back the ledger row inserted above.
-      for (const line of sale.lines) {
-        const product = await ports.products.find(line.product_id);
-        if (product === null) {
-          throw new EventValidationError(
-            'unknown_product',
-            `Line ${line.sale_line_id} refers to unknown product ${line.product_id}.`,
-          );
-        }
-      }
+      await this.checkProducts(sale, ports.products);
 
       // Same transaction as the ledger row: if the receipt or any line
       // fails, the accepted event is rolled back too.
@@ -112,5 +94,38 @@ export class IngestEvent {
       );
       return { outcome: 'created', acceptance };
     });
+  }
+
+  private async handleRetry(
+    eventId: string,
+    payloadHash: string,
+    events: EventLedgerRepository,
+  ): Promise<IngestEventResult> {
+    const stored = await events.find(eventId);
+    if (stored === null) {
+      throw new Error(`Ledger row for event ${eventId} not found.`);
+    }
+    if (stored.payload_hash !== payloadHash) {
+      throw new EventConflictError(eventId);
+    }
+    return {
+      outcome: 'duplicate',
+      acceptance: { ...stored.acceptance, duplicate: true },
+    };
+  }
+
+  private async checkProducts(
+    sale: SaleInput,
+    products: ProductLookup,
+  ): Promise<void> {
+    for (const line of sale.lines) {
+      const product = await products.find(line.product_id);
+      if (product === null) {
+        throw new EventValidationError(
+          'unknown_product',
+          `Line ${line.sale_line_id} refers to unknown product ${line.product_id}.`,
+        );
+      }
+    }
   }
 }
