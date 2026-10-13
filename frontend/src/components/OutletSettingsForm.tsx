@@ -76,10 +76,10 @@ export function OutletSettingsForm({
       });
   }
   return (
-    <form onSubmit={save}>
+    <form onSubmit={save} className="settings-form">
       <fieldset disabled={state.status === 'saving'}>
-        <legend>Outlet settings</legend>
-        <p>
+        <legend className="sr-only">Outlet settings</legend>
+        <p className="form-field">
           <label htmlFor="daily-plan">Daily plan (minor units) </label>
           <input
             id="daily-plan"
@@ -87,11 +87,16 @@ export function OutletSettingsForm({
             inputMode="numeric"
             pattern="[1-9][0-9]*"
             required
+            aria-describedby="daily-plan-help"
             value={fields.daily_plan_minor}
             onChange={(event) => change('daily_plan_minor', event.target.value)}
           />
+          <small id="daily-plan-help">
+            Enter a positive whole amount in minor units. For a two-decimal
+            currency, 100 minor units = 1 currency unit.
+          </small>
         </p>
-        <p>
+        <p className="form-field">
           <label htmlFor="responsible-name">Responsible person name </label>
           <input
             id="responsible-name"
@@ -100,7 +105,7 @@ export function OutletSettingsForm({
             onChange={(event) => change('name', event.target.value)}
           />
         </p>
-        <p>
+        <p className="form-field">
           <label htmlFor="responsible-email">Responsible person email </label>
           <input
             id="responsible-email"
@@ -110,12 +115,24 @@ export function OutletSettingsForm({
             onChange={(event) => change('email', event.target.value)}
           />
         </p>
-        <button type="submit" disabled={!changed || state.status === 'saving'}>
-          Save settings
-        </button>
+        <div className="form-actions">
+          <span className="helper-text">
+            {changed ? 'You have unsaved changes.' : 'All changes are saved.'}
+          </span>
+          <button
+            className="button-primary"
+            type="submit"
+            disabled={!changed || state.status === 'saving'}
+          >
+            Save settings
+          </button>
+        </div>
       </fieldset>
       {state.message && (
-        <p role={state.status === 'error' ? 'alert' : 'status'}>
+        <p
+          className={`notice ${state.status === 'error' ? 'notice-error' : state.status === 'success' ? 'notice-success' : ''}`}
+          role={state.status === 'error' ? 'alert' : 'status'}
+        >
           {state.message}
         </p>
       )}
