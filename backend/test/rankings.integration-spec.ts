@@ -22,9 +22,13 @@ async function sale(
   occurredAt: string,
   amount = 100n,
 ): Promise<void> {
-  await new IngestEvent(new PostgresTransactionRunner(dataSource), {
-    now: () => asOf,
-  }).execute({
+  await new IngestEvent(
+    new PostgresTransactionRunner(dataSource),
+    {
+      now: () => asOf,
+    },
+    { request: () => {} },
+  ).execute({
     kind: 'sale',
     event_id: randomUUID(),
     receipt_id: randomUUID(),
