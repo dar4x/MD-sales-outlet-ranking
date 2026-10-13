@@ -72,4 +72,20 @@ await describe('PostgresRankingQuery', async () => {
     assert.equal(row.ends_at, asOf);
     assert.equal(row.local_date, '2026-10-13');
   });
+  await it('rounds averages exactly and keeps empty outlets null', async () => {
+    await sale(BISHKEK_OUTLET_ID, '2026-10-13T05:30:00Z', 9223372036854775807n);
+    await sale(BISHKEK_OUTLET_ID, '2026-10-13T05:40:00Z', 0n);
+    const snapshot = await query.get('hour', asOf);
+    const active = snapshot.rows.find(
+      (row) => row.outlet_id === BISHKEK_OUTLET_ID,
+    )!;
+    assert.equal(active.average_check_minor, '4611686018427387904');
+    for (const row of snapshot.rows) {
+      if (row.outlet_id !== BISHKEK_OUTLET_ID) {
+        assert.equal(row.net_revenue_minor, '0');
+        assert.equal(row.receipt_count, 0);
+        assert.equal(row.average_check_minor, null);
+      }
+    }
+  });
 });

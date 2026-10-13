@@ -54,7 +54,7 @@ export class PostgresRankingQuery implements RankingQuery {
           'starts_at', to_char(starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
           'ends_at', to_char(as_of AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
           'rank', 0, 'net_revenue_minor', net::text, 'receipt_count', receipt_count,
-          'average_check_minor', NULL, 'previous_revenue_minor', NULL,
+          'average_check_minor', round(net / NULLIF(receipt_count, 0))::text, 'previous_revenue_minor', NULL,
           'dynamics_bps', NULL, 'is_leader', false, 'is_laggard', false,
           'stale', false, 'behind_plan', false
         ) ORDER BY outlet_id) FROM metrics
