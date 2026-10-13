@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { it } from 'node:test';
 import { validateEnvironment } from '../src/config/environment.validation.js';
