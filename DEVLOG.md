@@ -182,3 +182,65 @@ and atomic episode/outbox records give less coupling without redundant handlers.
   cleanup as requested. Tests retained their records in the separate review DB;
   no databases were dropped. PostgreSQL and Mailpit remain running for re-review.
   The exact /status model variant was not accessible or newly asserted.
+
+## 2026-10-13T14:27:46+06:00 — feature/events-ingestion final main-database verification
+
+- Developer explicitly authorized resetting this project's disposable Docker
+  volume, committing, pushing feature/events-ingestion and opening a PR into dev.
+  Confirmed the feature branch and preserved the pre-existing MYLOG.md change.
+  Did not edit/commit MYLOG.md, README.md or CLAUDE.md, touch backup/first-pass,
+  change timestamps, rewrite history, delete Git refs, or merge anything.
+- Passed `docker compose down -v && docker compose up -d --wait`; only this
+  Compose project's PostgreSQL volume was removed/recreated. PostgreSQL and
+  Mailpit became healthy. This reset also removed the earlier isolated review DB.
+- Passed `npm --prefix backend run migration:run`: all six migrations applied
+  to the fresh main database. Before tests inserted large quantities, passed
+  `npm --prefix backend run migration:revert` once (newest WidenSaleLineQuantity),
+  then `npm --prefix backend run migration:run` reapplied it. No POSTGRES_DB
+  override was used. The preceding fix-phase entry separately records all five
+  new migrations reverting/reapplying on empty business tables.
+- Main-database baseline passed: `npm --prefix backend run typecheck`,
+  `rtk proxy npm --prefix backend run lint`,
+  `npm --prefix backend run format:check`, `npm --prefix backend run build`,
+  and `npm --prefix backend test` (84 tests, seven suites, 84 passed, zero failed,
+  cancelled, skipped or todo). No unexpected failure required a code fix.
+- Ran `/tmp/events-ingestion-mutations.py` to temporarily remove one fix at a
+  time and run the entire `npm --prefix backend test` suite without DB overrides.
+  Each run compiled the changed source. try/finally restored the exact original
+  source bytes; no mutation was committed. Temporary output logs were written
+  only under /tmp, not in the repository. The script also compared protected-file
+  SHA-256 hashes and found no change.
+
+| Removed fix | Tests that actually failed | Result |
+| --- | --- | --- |
+| non-object line guard | returns 422 for an array used as a sale line; rejects non-object line elements instead of throwing TypeError | exit 1; 82 passed / 2 failed; HTTP 500 instead of 422 and TypeError |
+| millisecond precision check | returns 422 timestamp_precision for sub-millisecond input; rejects timestamp precision beyond milliseconds with its own code | exit 1; 82 passed / 2 failed; HTTP 201 instead of 422 and missing expected exception |
+| five UUID lowercase conversions | returns the original acceptance when UUID casing changes; returns 422 for sale line IDs differing only in UUID casing; normalizes every UUID to lowercase | exit 1; 81 passed / 3 failed; HTTP 409 instead of 200, HTTP 500 instead of 422 and uppercase UUID retained |
+| connection-failure 503 branch | sanitizes database connection failures as 503 | exit 1; 83 passed / 1 failed; HTTP 500 instead of 503 |
+
+- After restoration, `git diff --exit-code -- backend docs/API_CONTRACT.md
+  docs/DOMAIN_MODEL.md ARCHITECTURE.md` passed and `git diff --check` passed.
+  The only existing working-tree difference was MYLOG.md; it was not erased to
+  claim a globally clean working tree. Source/code diff was clean.
+- Final restored checks passed again: `npm --prefix backend run typecheck`,
+  `rtk proxy npm --prefix backend run lint`,
+  `npm --prefix backend run format:check`, `npm --prefix backend run build`,
+  `npm --prefix backend test` (84 tests, seven suites, 84 passed, zero failed,
+  cancelled, skipped or todo), all on the main database without overrides.
+- Self-reviewed `git log --oneline fd1b24d..HEAD` and the relevant implementation /
+  contracts: findings 1–5 are covered by parser normalization/validation and
+  sanitized connection errors; finding 8 has the two requested private methods
+  handleRetry/checkProducts; finding 9 documents pending returns. No new
+  dependencies, abstractions or additional production fixes were necessary.
+- Not verified: a real database outage, browser sales UI, returns, ranking SQL,
+  alert/outbox worker behavior, live broadcasts, or intermediate historical
+  commit builds. SQL-error preservation uses real HTTP with injected use-case
+  errors, not a live server outage. Cross-outlet contention, identity conflicts,
+  original retry acceptance, money limits, atomic rollback and activity behavior
+  passed their existing real-database tests. Test-data cleanup and parallel HTTP
+  differing-payload coverage remain intentionally deferred by the developer.
+- The entry timestamp came from `date --iso-8601=seconds`. Docker services remain
+  running for review. Publication follows this verification-record commit:
+  `git push -u origin feature/events-ingestion`, then `gh --version` and
+  `gh auth status`; create a PR with base dev only if gh is installed/logged in.
+  This entry does not claim those later commands already succeeded.
