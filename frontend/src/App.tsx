@@ -1,5 +1,5 @@
-import { FoundationPage } from './pages/FoundationPage';
+import { DashboardPage } from './pages/DashboardPage';
 
 export function App() {
-  return <FoundationPage />;
+  return <DashboardPage />;
 }
