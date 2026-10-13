@@ -409,3 +409,136 @@ and atomic episode/outbox records give less coupling without redundant handlers.
 - gh auth status confirmed authenticated dar4x access. Timestamp above is actual
   date --iso-8601=seconds output. Push and PR creation follow this log commit;
   their success is not claimed in this entry.
+
+
+## Simulator and catalogue reads — 2026-10-13T16:04:54+06:00
+
+- Ran git status --short --branch, git checkout dev and git pull --ff-only.
+  gh pr view 11 --json state,mergedAt,mergeCommit confirmed MERGED:
+  cce54c1b01eb6b18719b2b12f55e7e2afb444a69 at 2026-10-13T09:32:28Z.
+  git log --oneline -5 showed the realtime rankings merge. Created
+  feature/simulator from dev. The existing MYLOG.md edit stayed untouched and
+  was excluded from every commit.
+- Added ListProducts using the existing ProductCatalogueQuery and PostgreSQL
+  adapter; the controller encodes bigint catalogue prices as decimal strings.
+  Added ListOutlets using OutletQuery and a PostgreSQL adapter returning only
+  outlet_id, name and time_zone. Removed the unused planned OutletQuery.find
+  reservation so this port only requires the implemented list operation; no
+  settings/card route or speculative find adapter was added.
+  Both real HTTP tests first failed 404 versus 200, then passed by comparing
+  the response with SQL against sales_ranking_test.
+- Added a standalone simulator package with strict TypeScript, no any and no
+  backend imports. Only the six allowed devDependencies were installed at
+  backend's exact versions: typescript, eslint, @eslint/js, typescript-eslint,
+  eslint-config-prettier and prettier. No runtime dependency was added.
+  npm install --ignore-scripts installed 98 packages, reported zero vulnerabilities.
+  Because @types/node was outside the allowlist, src/node.d.ts declares only
+  the Node APIs used. Package/versions/no-import audit passed.
+- Scaffold typecheck, lint, format:check, build, test, start and start:all ran
+  successfully; scaffold test count was 1. Builder tests preceded implementation
+  (TS2307 for the missing module), then covered fresh lowercase UUIDs, distinct
+  products, whole quantities, exact BigInt amounts, UTC millisecond timestamps,
+  bounds and seeded choices. CLI tests similarly preceded parsing code and
+  cover defaults/env overrides, malformed flags and invalid combinations.
+- Sender tests use tiny node:http servers, never backend imports or a live
+  database. They verify exact serialized body reuse after 503 and dropped
+  connection, terminal 409/422 with logged error bodies, duplicate acknowledgments
+  and bounded attempt exhaustion. Startup loads both HTTP catalogues, retries
+  four times at 500 ms intervals and fails clearly if unavailable.
+  Sale transport uses a 3 second timeout and five total attempts, with 500 ms
+  exponential pauses capped at 5 seconds; 409/422 never retry.
+- Implemented jittered scheduling, ten-second stats and SIGINT/SIGTERM shutdown.
+  Intentional duplicates preserve the complete receipt. Simulated outages
+  keep generating into a FIFO queue; flush preserves original occurred_at,
+  including a shutdown flush. Late counts successful queued receipts once each.
+  The launcher uses child_process, starts up to five outlets with distinct rates,
+  prefixes output, forwards flags and waits for children on shutdown.
+- Observed feature/fix failures before correction: formatting checked generated
+  dist files and reported eight warnings; .prettierignore fixed that without
+  changing source tests. The initial duplicate edit sent one body instead of two;
+  the test caught it before commit, and the completed resend path passed.
+  The outage test observed no queued receipts before queue implementation.
+  No test was weakened or deleted.
+- Simulator README documents commands, flags, retry/outage semantics and limits.
+  API_CONTRACT implementation status now includes the two lists; its request
+  and response shapes required no change. No prompt/contract conflict was found.
+  Seeds reproduce choices, not UUIDs/timestamps. Generation pauses during sending
+  and retry/flush; the queue is in memory. Observed 201 totals cannot prove all
+  inserts if a real connection is lost after commit and the retry returns 200.
+- Full pre-mutation backend checks all exited 0: npm run typecheck,
+  rtk proxy npm run lint, npm run format:check, npm run build, npm test.
+  Baseline: 117 tests, 10 suites, 117 passed, zero failed/cancelled/skipped/todo;
+  duration 12188.566606 ms. Tests force sales_ranking_test and serial files.
+- Full pre-mutation simulator checks all exited 0: npm run typecheck,
+  rtk proxy npm run lint, npm run format:check, npm run build, npm test.
+  Baseline: 12 tests, zero suites, 12 passed, zero failed/cancelled/skipped/todo;
+  duration 2749.310096 ms.
+- Mutation checks compiled each changed simulator using node_modules/.bin/tsc,
+  then ran node --test --test-name-pattern=<matching test>
+  dist/test/<matching file>.unit-spec.js. Each compiled and exited 1:
+  new retry event_id caused exact-body inequality;
+  late send-time substitution caused original occurred_at inequality;
+  new intentional-duplicate event_id caused exact-body inequality.
+  try/finally restored exact source bytes, followed by a fresh simulator build.
+  Logs are /tmp/simulator-mutation-*.log; no mutation was committed.
+  git diff --exit-code -- backend simulator docs .env.example DEVLOG.md and
+  git diff --check passed after restoration.
+- Live check used /tmp/simulator-live-check.py and a real Socket.IO client in
+  /tmp/simulator-live-observer.mjs, reusing the installed frontend client.
+  docker compose up -d --wait succeeded; PostgreSQL/Mailpit were already running
+  and their container IDs did not change. npm run migration:run in backend
+  succeeded with no migrations pending. Started backend with
+  node --env-file=../.env dist/main.js, subscribed the observer to hour, then ran:
+  npm run start:all -- --duplicate-percent 10 --outage-every-seconds 8
+  --outage-duration-seconds 3 --seed live-check.
+- The first live harness completed 30 seconds but failed its launcher-PID match:
+  Cannot find our launcher process. It incorrectly required argv without flags.
+  Its finally cleanup stopped all started process groups. Corrected only the
+  throwaway harness to recognize argv with flags and reran against fresh counts;
+  the first run's receipts remained in dev. No database was reset or cleaned.
+- Successful live run generated for 30 seconds; elapsed through final checks was
+  31.584 seconds. psql before/after counts came from:
+  SELECT o.outlet_id, count(s.receipt_id) FROM outlets o LEFT JOIN sale_receipts s
+  USING (outlet_id) GROUP BY o.outlet_id, wrapped in json_object_agg for capture.
+  Every outlet's delta exactly equaled its simulator-created count:
+
+| Outlet | Before | After | New rows | Created | Duplicates | Late |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Bishkek Center | 156 | 166 | 10 | 10 | 1 | 2 |
+| Almaty Mall | 20 | 35 | 15 | 15 | 2 | 6 |
+| Tashkent Bazaar | 20 | 40 | 20 | 20 | 2 | 7 |
+| Moscow Arbat | 24 | 48 | 24 | 24 | 3 | 9 |
+| Berlin Mitte | 29 | 58 | 29 | 29 | 3 | 11 |
+
+- Live totals: 98 created rows, 11 duplicate acknowledgments, 35 late receipts,
+  zero rejected/failed/queued at shutdown. psql joined sale_receipts and
+  accepted_events by event_id for all queued log IDs; all 35 persisted
+  occurred_at strings exactly matched queued originals. Maximum acceptance delay
+  was 4.884 seconds. Duplicate requests added no extra rows.
+- The observer received 42 snapshots. Its last snapshot matched
+  GET /api/rankings?window=hour for every outlet's net_revenue_minor,
+  receipt_count and rank (as_of/identity excluded).
+  Launcher received SIGINT, forwarded shutdown, flushed children and exited 0.
+  Observer exited 0; backend was stopped with SIGTERM. ps confirmed all three
+  task process groups absent and ss showed port 3000 free. Existing Docker
+  services were preserved. Results/logs are /tmp/simulator-live-results.json,
+  /tmp/simulator-live-before.json, /tmp/simulator-live-after.json and
+  /tmp/simulator-live-*.log.
+- Final restored backend checks again all exited 0: npm run typecheck,
+  rtk proxy npm run lint, npm run format:check, npm run build, npm test:
+  117 tests in 10 suites, 117 passed, zero failed/cancelled/skipped/todo,
+  duration 12091.340417 ms.
+- Final restored simulator checks again all exited 0: npm run typecheck,
+  rtk proxy npm run lint, npm run format:check, npm run build, npm test:
+  12 tests, zero suites, 12 passed, zero failed/cancelled/skipped/todo,
+  duration 2734.677292 ms. Real entrypoint checks for --rate 0, --unknown 1 and
+  --api-url http://127.0.0.1:9/api each exited 1 with a clear message; unavailable
+  startup reported failure after four attempts.
+- Not verified: browser UI, production deployment, sustained load, process-crash
+  queue durability, actual backend outage recovery in the live run (fake HTTP
+  servers covered retry behavior), returns/alerts, or isolated verification of
+  every historical commit. Frontend checks were not rerun for this branch.
+- Final source diff was clean except the original MYLOG.md edit. gh auth status
+  confirmed authenticated dar4x access. Timestamp above is real
+  date --iso-8601=seconds output; no git timestamps were overridden.
+  Push/PR creation follow this log commit and are not claimed here.
