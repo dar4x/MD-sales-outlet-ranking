@@ -7,6 +7,8 @@ export async function deliverReceipt(
   apiUrl: string,
   receipt: SaleReceipt,
   totals: Totals,
+  duplicatePercent = 0,
+  random: () => number = Math.random,
   log: (message: string) => void = console.log,
 ): Promise<boolean> {
   const outcome = await sendReceipt(apiUrl, receipt, log);
@@ -14,7 +16,17 @@ export async function deliverReceipt(
   else if (outcome === "duplicate") totals.duplicates += 1;
   else if (outcome === "rejected") totals.rejected += 1;
   else totals.failed += 1;
-  return outcome === "created" || outcome === "duplicate";
+  const succeeded = outcome === "created" || outcome === "duplicate";
+  if (succeeded && random() * 100 < duplicatePercent) {
+    const duplicate = await sendReceipt(apiUrl, receipt, log);
+    if (duplicate === "duplicate") totals.duplicates += 1;
+    else if (duplicate === "created") {
+      totals.created += 1;
+      log("Duplicate resend unexpectedly returned 201; expected 200.");
+    } else if (duplicate === "rejected") totals.rejected += 1;
+    else totals.failed += 1;
+  }
+  return succeeded;
 }
 
 export async function runSimulator(
@@ -72,7 +84,14 @@ export async function runSimulator(
         new Date(),
         random,
       );
-      await deliverReceipt(flags.apiUrl, receipt, totals, log);
+      await deliverReceipt(
+        flags.apiUrl,
+        receipt,
+        totals,
+        flags.duplicatePercent,
+        random,
+        log,
+      );
       // Jitter changes timing only; money arithmetic stays in BigInt.
       const interval = Math.max(
         1,
