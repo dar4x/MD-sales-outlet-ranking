@@ -8,3 +8,14 @@ export class EventValidationError extends Error {
     this.name = 'EventValidationError';
   }
 }
+
+// Same event_id was already accepted with different business content;
+// presentation maps it to HTTP 409.
+export class EventConflictError extends Error {
+  readonly code = 'event_conflict';
+
+  constructor(eventId: string) {
+    super(`Event ${eventId} was already accepted with a different payload.`);
+    this.name = 'EventConflictError';
+  }
+}
