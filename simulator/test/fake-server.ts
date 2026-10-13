@@ -7,6 +7,22 @@ export async function fakeServer(statuses: (number | "drop")[]): Promise<{
 }> {
   const bodies: string[] = [];
   const server = createServer((request, response) => {
+    if (request.method === "GET") {
+      const items =
+        request.url === "/api/outlets"
+          ? [{ outlet_id: "outlet", name: "Test Outlet", time_zone: "UTC" }]
+          : [
+              {
+                product_id: "product",
+                sku: "sku",
+                name: "Product",
+                unit_price_minor: "10",
+              },
+            ];
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify({ items }));
+      return;
+    }
     request.setEncoding("utf8");
     let body = "";
     request.on("data", (chunk) => {

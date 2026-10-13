@@ -54,6 +54,33 @@ export async function runSimulator(
     failed: 0,
     late: 0,
   };
+  const queue: { receipt: SaleReceipt; late: boolean }[] = [];
+  let offline = false;
+  let nextOutageAt = Date.now() + flags.outageEverySeconds * 1000;
+  let outageUntil = 0;
+  const flush = async (): Promise<void> => {
+    while (queue.length > 0) {
+      const pending = queue[0]!;
+      const succeeded = await deliverReceipt(
+        flags.apiUrl,
+        pending.receipt,
+        totals,
+        flags.duplicatePercent,
+        random,
+        log,
+      );
+      if (pending.late && succeeded) {
+        totals.late += 1;
+        log(
+          "late event_id=" +
+            pending.receipt.event_id +
+            " occurred_at=" +
+            pending.receipt.occurred_at,
+        );
+      }
+      queue.shift();
+    }
+  };
   const printStats = (prefix: string): void => {
     log(
       prefix +
@@ -69,13 +96,25 @@ export async function runSimulator(
         totals.failed +
         " late=" +
         totals.late +
-        " queued=0",
+        " queued=" +
+        queue.length,
     );
   };
   const statsTimer = setInterval(() => printStats("stats"), 10000);
   try {
     log("started outlet=" + outlet.name + " rate=" + flags.rate);
     while (!signal.aborted) {
+      const now = Date.now();
+      if (offline && now >= outageUntil) {
+        offline = false;
+        log("outage ended; flushing " + queue.length + " queued receipts");
+      }
+      if (!offline && flags.outageEverySeconds > 0 && now >= nextOutageAt) {
+        offline = true;
+        outageUntil = now + flags.outageDurationSeconds * 1000;
+        nextOutageAt = now + flags.outageEverySeconds * 1000;
+        log("outage started outlet=" + outlet.name);
+      }
       const receipt = buildReceipt(
         outlet.outlet_id,
         products,
@@ -84,14 +123,17 @@ export async function runSimulator(
         new Date(),
         random,
       );
-      await deliverReceipt(
-        flags.apiUrl,
-        receipt,
-        totals,
-        flags.duplicatePercent,
-        random,
-        log,
-      );
+      queue.push({ receipt, late: offline });
+      if (offline) {
+        log(
+          "queued event_id=" +
+            receipt.event_id +
+            " occurred_at=" +
+            receipt.occurred_at,
+        );
+      } else {
+        await flush();
+      }
       // Jitter changes timing only; money arithmetic stays in BigInt.
       const interval = Math.max(
         1,
@@ -108,6 +150,8 @@ export async function runSimulator(
         else signal.addEventListener("abort", stop, { once: true });
       });
     }
+    // Shutdown ignores the simulated outage and attempts every pending receipt.
+    await flush();
     printStats("final");
     return totals;
   } finally {
