@@ -1,6 +1,6 @@
 # Planned API contract
 
-Implemented: sale ingestion, ping/health and Socket.IO ping/pong. Returns and
+Implemented: sale ingestion, HTTP rankings, ping/health and Socket.IO ping/pong. Returns and
 all other business routes/events below remain planned. Developer-approved decisions,
 implemented with AI assistance; independent frontend contracts must not import backend.
 
@@ -15,8 +15,8 @@ UTC offset on input and use UTC `Z` on output. Fractional seconds have at most
 three digits (milliseconds); finer input receives 422 with code
 `timestamp_precision`, preventing distinct instants from hashing identically. Zones are IANA names. Money uses
 integer minor units encoded as decimal strings in JSON; never JavaScript floats.
-Quantities/counts/ranks are safe integers. Average check is an exact SQL numeric
-minor-unit decimal string (it may be fractional), not stored money. Rates use
+Quantities/counts/ranks are safe integers. Ranking average check is rounded in SQL to a whole minor-unit decimal string
+(halfway values round away from zero), not stored money. Rates use
 integer basis points. Single configured currency; no currency conversion.
 
 Business errors: `{ code, message, details? }`; malformed JSON is 400, invalid
@@ -77,7 +77,21 @@ rank, net_revenue_minor, receipt_count, average_check_minor, previous_revenue_mi
 dynamics_bps, is_leader, is_laggard, stale, behind_plan }`.
 Hour dynamics compare preceding hour; business-day previous revenue and dynamics
 are null. Descending net revenue, ascending outlet_id gives unique stable ranks.
-With at least two outlets, first/last ranks are leader/laggard even on equal revenue.
+With at least two outlets and unequal revenues, first/last ranks are leader/laggard.
+Both flags are false for one outlet or when all revenues are equal. Stale and
+behind_plan remain false until alerts are implemented.
+
+RankingQuery takes an optional as_of instant for deterministic tests; production
+omits it and SQL captures COALESCE(as_of, clock_timestamp()) once per response.
+This is a port parameter, not an HTTP query field. Missing HTTP window defaults
+to business_day; invalid values and unknown query fields receive 422.
+Hour starts_at = as_of - 1 hour; ends_at = as_of. Business-day starts_at is the
+outlet's own IANA local midnight converted to UTC, never as_of minus 24 hours;
+ends_at = as_of. In both windows local_date is the outlet's local date at as_of.
+Hour previous_revenue_minor covers [as_of - 2 hours, as_of - 1 hour).
+Hour dynamics_bps = round((current - previous) * 10000 / previous) when previous
+is positive, otherwise null. Business-day previous revenue and dynamics are null.
+Returns are not ingested yet; the ranking SQL has an empty return_totals CTE.
 
 OutletSummary: `{ outlet_id, name, time_zone }`. Product:
 `{ product_id, sku, name, unit_price_minor }` (seeded catalogue).
@@ -105,7 +119,7 @@ positive whole quantities and nonnegative prices; a return cannot predate its sa
 
 Window bounds are [start, as_of); occurrence time, not acceptance time, attributes
 late events. Returns count at their own occurred_at, reducing revenue/quantities;
-receipt_count counts sales only. Average check = net revenue / sale count, null
+receipt_count counts sales only. Ranking average check = round(net revenue / sale count), null
 when count is zero; return-only windows may have negative revenue. Query all
 outlets, including zero-sales outlets. Recompute from persisted facts after restart.
 
