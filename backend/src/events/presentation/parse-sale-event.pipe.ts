@@ -52,6 +52,13 @@ export class ParseSaleEventPipe implements PipeTransform<unknown, SaleInput> {
       );
     }
 
+    if (/\.\d{4,}/.test(dto.occurred_at)) {
+      throw new EventValidationError(
+        'timestamp_precision',
+        'occurred_at must have at most three fractional-second digits.',
+      );
+    }
+
     const lines: SaleLine[] = [];
     for (const line of dto.lines) {
       lines.push({

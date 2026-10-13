@@ -217,4 +217,12 @@ await describe('ParseSaleEventPipe', async () => {
       assertRejected({ ...buildBody(), lines: [line] }, 'invalid_request');
     }
   });
+  await it('rejects timestamp precision beyond milliseconds with its own code', () => {
+    for (const fraction of ['0001', '0002', '123000']) {
+      assertRejected(
+        { ...buildBody(), occurred_at: `2026-10-13T06:00:00.${fraction}Z` },
+        'timestamp_precision',
+      );
+    }
+  });
 });

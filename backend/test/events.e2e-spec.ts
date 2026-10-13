@@ -212,4 +212,12 @@ await describe('POST /api/events', async () => {
     assert.equal(result.status, 422);
     assert.equal(result.json.code, 'invalid_request');
   });
+  await it('returns 422 timestamp_precision for sub-millisecond input', async () => {
+    const result = await postEvent({
+      ...buildSaleBody(randomUUID()),
+      occurred_at: '2026-10-13T06:00:00.0001Z',
+    });
+    assert.equal(result.status, 422);
+    assert.equal(result.json.code, 'timestamp_precision');
+  });
 });
