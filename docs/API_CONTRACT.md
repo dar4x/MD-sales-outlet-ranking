@@ -1,27 +1,34 @@
 # Planned API contract
 
-Design only: business routes and events below are not implemented. Existing
-ping/health and Socket.IO ping/pong remain runnable. Developer-approved decisions,
+Implemented: sale ingestion, ping/health and Socket.IO ping/pong. Returns and
+all other business routes/events below remain planned. Developer-approved decisions,
 implemented with AI assistance; independent frontend contracts must not import backend.
 
 ## Encoding and errors
 
 IDs are UUID strings; outlet/product IDs are seeded by the server. Event, receipt,
-sale-line and return-line IDs are client supplied. Timestamps require an explicit
-UTC offset on input and use UTC `Z` on output. Zones are IANA names. Money uses
+sale-line and return-line IDs are client supplied. The parser normalizes every
+UUID to lowercase before duplicate checks and hashing; case-only changes are
+identical retries, and case-only duplicate line IDs are rejected with 422.
+Timestamps require an explicit
+UTC offset on input and use UTC `Z` on output. Fractional seconds have at most
+three digits (milliseconds); finer input receives 422 with code
+`timestamp_precision`, preventing distinct instants from hashing identically. Zones are IANA names. Money uses
 integer minor units encoded as decimal strings in JSON; never JavaScript floats.
 Quantities/counts/ranks are safe integers. Average check is an exact SQL numeric
 minor-unit decimal string (it may be fractional), not stored money. Rates use
 integer basis points. Single configured currency; no currency conversion.
 
 Business errors: `{ code, message, details? }`; malformed JSON is 400, invalid
-business input 422, unavailable database 503. Unknown fields are rejected.
+business input 422, unavailable database 503 (`database_unavailable`, sanitized
+message). Other SQL/application errors keep their normal 500 handling; malformed
+JSON keeps 400. Unknown fields are rejected.
 
 ## HTTP
 
 | Method/path                                         | Request                                               | Response                           | Status                                                                                                                            | Use case                     |
 | --------------------------------------------------- | ----------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| POST /api/events                                    | SaleInput or ReturnInput below                        | Acceptance                         | 201 new; 200 identical retry; 409 conflicting event/receipt identity; 422 invalid references, quantities, prices or return limits | IngestEvent                  |
+| POST /api/events                                    | SaleInput; ReturnInput pending                        | Acceptance                         | 201 new; 200 identical retry; 409 conflicting event/receipt identity; 422 invalid references, quantities, prices or return limits | IngestEvent                  |
 | GET /api/rankings?window=hour\|business_day         | default business_day                                  | RankingSnapshot                    | 200, 422                                                                                                                          | GetRankings                  |
 | GET /api/outlets                                    | none                                                  | `{ items: OutletSummary[] }`       | 200                                                                                                                               | ListOutlets                  |
 | GET /api/outlets/:id/card?window=hour\|business_day | default business_day                                  | OutletCard                         | 200, 404, 422                                                                                                                     | GetOutletCard                |
@@ -36,8 +43,11 @@ SaleInput: `{ kind: "sale", event_id, receipt_id, outlet_id, occurred_at,
 lines: [{ sale_line_id, product_id, quantity, unit_price_minor, line_amount_minor }] }`.
 ReturnInput: `{ kind: "return", event_id, outlet_id, occurred_at, sale_receipt_id,
 lines: [{ return_line_id, sale_line_id, quantity }] }`. No return amount is accepted.
+Return ingestion is pending: requests with `kind: "return"` currently receive
+422 `unsupported_kind`; the ReturnInput shape above is the future contract.
 Acceptance: `{ event_id, outlet_id, kind, accepted_at, amount_minor, duplicate }`;
-amount is positive gross sale or derived refund magnitude. Retry preserves the
+amount is nonnegative gross sale or derived refund magnitude (free sales may
+produce zero). Retry preserves the
 original accepted_at/result and changes only duplicate to true.
 OutletSettings: `{ outlet_id, daily_plan_minor, responsible_person: { name, email } }`.
 PATCH uses last write wins for supplied fields; no expected_version or 409.
