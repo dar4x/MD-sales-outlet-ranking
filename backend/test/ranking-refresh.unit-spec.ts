@@ -6,8 +6,9 @@ import { CoalescedRankingRefresh } from '../src/rankings/infrastructure/coalesce
 await it('coalesces 50 requests into exactly one refresh', async () => {
   let calls = 0;
   const refresh = new CoalescedRankingRefresh(
-    async () => {
+    () => {
       calls += 1;
+      return Promise.resolve();
     },
     20,
     (error) => assert.fail(String(error)),
@@ -23,8 +24,9 @@ await it('coalesces 50 requests into exactly one refresh', async () => {
 await it('waits for the trailing delay after the last request', async () => {
   let calls = 0;
   const refresh = new CoalescedRankingRefresh(
-    async () => {
+    () => {
       calls += 1;
+      return Promise.resolve();
     },
     80,
     (error) => assert.fail(String(error)),
@@ -86,9 +88,10 @@ await it('logs a failed refresh and accepts later requests', async () => {
   const failures: unknown[] = [];
   const failure = new Error('query failed');
   const refresh = new CoalescedRankingRefresh(
-    async () => {
+    () => {
       calls += 1;
-      if (calls === 1) throw failure;
+      if (calls === 1) return Promise.reject(failure);
+      return Promise.resolve();
     },
     10,
     (error) => {
@@ -109,8 +112,9 @@ await it('logs a failed refresh and accepts later requests', async () => {
 await it('cancels a queued refresh on shutdown', async () => {
   let calls = 0;
   const refresh = new CoalescedRankingRefresh(
-    async () => {
+    () => {
       calls += 1;
+      return Promise.resolve();
     },
     20,
     (error) => assert.fail(String(error)),
@@ -125,8 +129,9 @@ await it('cancels a queued refresh on shutdown', async () => {
 await it('clears the periodic tick on shutdown', async () => {
   let calls = 0;
   const refresh = new CoalescedRankingRefresh(
-    async () => {
+    () => {
       calls += 1;
+      return Promise.resolve();
     },
     5,
     (error) => assert.fail(String(error)),
@@ -144,8 +149,9 @@ await it('clears the periodic tick on shutdown', async () => {
 await it('does not postpone a queued refresh forever when the timer interval is shorter than coalescing', async () => {
   let calls = 0;
   const refresh = new CoalescedRankingRefresh(
-    async () => {
+    () => {
       calls += 1;
+      return Promise.resolve();
     },
     40,
     (error) => assert.fail(String(error)),

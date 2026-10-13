@@ -2,16 +2,15 @@
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { Socket } from '../../frontend/node_modules/socket.io-client/build/esm/index.js';
+import type * as SocketIoClient from '../../frontend/node_modules/socket.io-client/build/esm/index.js';
 /* Internal deps */
 import type { RankingSnapshot } from '../src/rankings/application/read-models/ranking.js';
 
 // Reuse the existing frontend dependency; no backend dependency is added.
 const require = createRequire(resolve('../frontend/package.json'));
-const { io } =
-  require('socket.io-client') as typeof import('../../frontend/node_modules/socket.io-client/build/esm/index.js');
+const { io } = require('socket.io-client') as typeof SocketIoClient;
 
-export async function connect(url: string): Promise<Socket> {
+export async function connect(url: string): Promise<SocketIoClient.Socket> {
   const socket = io(url, { transports: ['websocket'], reconnection: false });
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -32,7 +31,7 @@ export async function connect(url: string): Promise<Socket> {
 }
 
 export function acknowledge(
-  socket: Socket,
+  socket: SocketIoClient.Socket,
   event: string,
   payload: unknown,
 ): Promise<unknown> {

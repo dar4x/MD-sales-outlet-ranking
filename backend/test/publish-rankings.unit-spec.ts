@@ -11,21 +11,22 @@ await it('reads and publishes once for each subscribed window only', async () =>
   let windows: RankingWindow[] = [];
   const useCase = new PublishRankings(
     new GetRankings({
-      get: async (window) => {
+      get: (window) => {
         reads.push(window);
-        return {
+        return Promise.resolve({
           snapshot_id: window,
           as_of: '2026-10-13T06:00:00Z',
           window,
           currency: 'KGS',
           rows: [],
-        };
+        });
       },
     }),
     {
       subscribedWindows: () => windows,
-      publish: async (snapshot) => {
+      publish: (snapshot) => {
         published.push(snapshot);
+        return Promise.resolve();
       },
     },
   );

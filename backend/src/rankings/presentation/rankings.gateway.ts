@@ -79,9 +79,10 @@ export class RankingsGateway implements RankingPublisher {
     return windows;
   }
 
-  async publish(snapshot: RankingSnapshot): Promise<void> {
+  publish(snapshot: RankingSnapshot): Promise<void> {
     this.server
       .to('rankings:' + snapshot.window)
       .emit('rankings.snapshot', snapshot);
+    return Promise.resolve();
   }
 }
