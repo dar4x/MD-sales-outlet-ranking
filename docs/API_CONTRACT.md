@@ -1,6 +1,7 @@
 # Planned API contract
 
-Implemented: sale ingestion, HTTP and Socket.IO rankings, ping/health and Socket.IO ping/pong. Returns and
+Implemented: sale ingestion, product/outlet lists, HTTP and Socket.IO rankings,
+ping/health and Socket.IO ping/pong. Returns and
 all other business routes/events below remain planned. Developer-approved decisions,
 implemented with AI assistance; independent frontend contracts must not import backend.
 
