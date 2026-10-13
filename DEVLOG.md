@@ -542,3 +542,45 @@ and atomic episode/outbox records give less coupling without redundant handlers.
   confirmed authenticated dar4x access. Timestamp above is real
   date --iso-8601=seconds output; no git timestamps were overridden.
   Push/PR creation follow this log commit and are not claimed here.
+
+
+## Backend completion — 2026-10-13T18:52:51+06:00
+
+- Read API_CONTRACT.md, DOMAIN_MODEL.md and ARCHITECTURE.md before implementation.
+  `gh pr view 12` confirmed MERGED, merge commit
+  12767cc97af53e82591f9095d71cd741d9f55c51, merged 2026-10-13T11:43:35Z.
+  `git checkout dev` and `git pull --ff-only` completed before branching.
+- Created six cumulative local feature branches: return-ingestion, outlet-details,
+  outlet-settings, stale-alerts, midday-alerts, alert-email. Focused commits implement
+  partial locked returns, exact server refunds, idempotency/conflicts/rollback,
+  outlet cards/settings, stale episodes, persistent IANA civil-noon assessments,
+  catch-up/expiration, transactional outbox, SMTP retry and worker exclusion.
+- Essential tests cover concurrency, rollback after persistence and alert resolution,
+  DST civil days, clipped five-minute bins, plan thresholds/frozen assessments,
+  SMTP failures/timeouts, persisted retries and the accepted-SMTP/failed-status-write
+  duplicate-delivery limitation. Real HTTP/Socket.IO/Mailpit integration passed.
+- Observed pre-fix failures included UPDATE result-shape HTTP 500, valid JSON null
+  receiving 400 instead of contract 422, cancelled card-suite hooks, and fixed-bin
+  test expecting 13 clipped bins but receiving 12. Implementations corrected these;
+  tests retained and passed. Intermediate failed checks were not reported as passing.
+- `npm run test:db:setup` applied migrations to isolated sales_ranking_test.
+  Final backend commands: `npm run typecheck`, `rtk proxy npm run lint`,
+  `npm run format:check`, `npm run build`, `npm test`; all exited 0.
+  Final tests: 143 tests, 17 suites, 143 passed, 0 failed/cancelled/skipped/todo,
+  duration 24632.838405 ms; output /tmp/backend-completed-final.log.
+- `npm run migration:run` applied CreateReturns1791900000000 and
+  CreateAlertsAndOutbox1791901000000 to development without resetting data.
+  `npm run migration:show` showed all eight migrations applied.
+  psql counts before and after were identical: sale_receipts 437, sale_lines 986,
+  accepted_events 467, outlets 41, products 6; diff exited 0.
+  Count evidence: /tmp/backend-dev-counts-before.txt and -after.txt.
+- Backend test-only socket.io-client 4.8.4 now declared locally, removing dependency
+  on frontend node_modules. No new runtime dependencies or frontend edits.
+- Contract implementation notes aligned with completed behavior. PR descriptions
+  prepared in docs/BACKEND_PR_DRAFTS.md, all targeting dev.
+- Not verified: production deployment, browser UI, sustained load, or each final
+  intermediate branch head independently after cherry-picked fixes. The combined
+  final backend is verified. No mandatory functionality remains incomplete locally.
+- No push, PR creation or merge: user explicitly requires approval before pushing.
+  MYLOG.md was neither edited nor staged; its pre-existing change remains.
+  No protected root documentation changed. No git dates overridden.
