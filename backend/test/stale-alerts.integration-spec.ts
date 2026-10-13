@@ -133,4 +133,58 @@ await describe('Stale episodes', async () => {
     );
     assert.equal(episodes.length, 0);
   });
+  await it('rolls activity and alert resolution back when ingestion fails after resolving the episode', async () => {
+    await evaluate.execute();
+    const failing = new IngestEvent(
+      {
+        run: (operation) =>
+          runner.run(async (ports) => {
+            const resolve = ports.alerts.resolveStale.bind(ports.alerts);
+            ports.alerts.resolveStale = async (id, time) => {
+              await resolve(id, time);
+              throw new Error('after stale resolution');
+            };
+            return operation(ports);
+          }),
+      },
+      { now: () => '2026-10-13T05:06:00Z' },
+      { request: () => assert.fail('No refresh on rollback') },
+    );
+    const eventId = randomUUID();
+    await assert.rejects(
+      failing.execute({
+        kind: 'sale',
+        event_id: eventId,
+        receipt_id: randomUUID(),
+        outlet_id: BISHKEK_OUTLET_ID,
+        occurred_at: '2026-10-13T05:04:00Z',
+        lines: [
+          {
+            sale_line_id: randomUUID(),
+            product_id: BREAD_PRODUCT_ID,
+            quantity: 1,
+            unit_price_minor: 100n,
+            line_amount_minor: 100n,
+          },
+        ],
+      }),
+      /after stale resolution/,
+    );
+    assert.equal((await rows())[0]!.resolved_at, null);
+    const activity: { last_accepted_at: Date | null }[] =
+      await dataSource.query(
+        'SELECT last_accepted_at FROM outlets WHERE outlet_id=$1',
+        [BISHKEK_OUTLET_ID],
+      );
+    assert.equal(activity[0]!.last_accepted_at, null);
+    assert.equal(
+      (
+        await dataSource.query<unknown[]>(
+          'SELECT event_id FROM accepted_events WHERE event_id=$1',
+          [eventId],
+        )
+      ).length,
+      0,
+    );
+  });
 });

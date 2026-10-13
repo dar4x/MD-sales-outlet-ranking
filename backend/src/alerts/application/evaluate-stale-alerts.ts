@@ -50,7 +50,7 @@ export class EvaluateStaleAlerts {
           },
         });
         if (inserted === 'episode_conflict') return false;
-        await ports.outbox.insert({
+        const jobResult = await ports.outbox.insert({
           job_id: jobId,
           episode_id: episodeId,
           notification_key: 'alert:' + episodeId,
@@ -73,6 +73,8 @@ export class EvaluateStaleAlerts {
           sent_at: null,
           last_error: null,
         });
+        if (jobResult !== 'inserted')
+          throw new Error('Notification identity conflict.');
         return true;
       });
       if (changed) this.refresh.request();
