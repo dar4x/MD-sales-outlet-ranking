@@ -1,6 +1,7 @@
 /* Internal deps */
 import type { Clock } from '../../shared/application/ports/clock.js';
 import type { TransactionRunner } from '../../shared/application/ports/transaction-runner.js';
+import { createSaleReceipt } from '../domain/create-sale-receipt.js';
 import { EventConflictError } from '../domain/event-errors.js';
 import type { Acceptance, SaleInput } from '../domain/event.js';
 import { validateSale } from '../domain/validate-sale.js';
@@ -22,18 +23,15 @@ export class IngestEvent {
     // would throw on an unparsable date.
     validateSale(sale);
 
+    const receipt = createSaleReceipt(sale);
     const canonicalPayload = canonicalizeSale(sale);
     const payloadHash = hashPayload(canonicalPayload);
-    let amountMinor = 0n;
-    for (const line of sale.lines) {
-      amountMinor += line.line_amount_minor;
-    }
     const acceptance: Acceptance = {
       event_id: sale.event_id,
       outlet_id: sale.outlet_id,
       kind: 'sale',
       accepted_at: this.clock.now(),
-      amount_minor: amountMinor,
+      amount_minor: receipt.gross_amount_minor,
       duplicate: false,
     };
 
@@ -48,6 +46,9 @@ export class IngestEvent {
         acceptance,
       });
       if (insertResult === 'inserted') {
+        // Same transaction as the ledger row: if the receipt or any line
+        // fails, the accepted event is rolled back too.
+        await ports.receipts.insert(receipt);
         return { outcome: 'created', acceptance };
       }
 

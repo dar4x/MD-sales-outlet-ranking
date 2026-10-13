@@ -1,8 +1,12 @@
-import type { EventLedgerRepository } from '../../../events/application/ports/event-repositories.js';
-// Only ports implemented so far; add receipts, outlets, alerts, outbox here
+import type {
+  EventLedgerRepository,
+  SaleReceiptRepository,
+} from '../../../events/application/ports/event-repositories.js';
+// Only ports implemented so far; add outlets, alerts, outbox here
 // when their features arrive.
 export interface TransactionPorts {
   events: EventLedgerRepository;
+  receipts: SaleReceiptRepository;
 }
 export interface TransactionRunner {
   run<Result>(

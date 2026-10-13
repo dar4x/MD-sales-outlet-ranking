@@ -3,6 +3,7 @@ import type { DataSource } from 'typeorm';
 
 /* Internal deps */
 import { PostgresEventLedgerRepository } from '../../events/infrastructure/postgres-event-ledger.repository.js';
+import { PostgresSaleReceiptRepository } from '../../events/infrastructure/postgres-sale-receipt.repository.js';
 import type {
   TransactionPorts,
   TransactionRunner,
@@ -17,6 +18,7 @@ export class PostgresTransactionRunner implements TransactionRunner {
     return this.dataSource.transaction((manager) => {
       const ports: TransactionPorts = {
         events: new PostgresEventLedgerRepository(manager),
+        receipts: new PostgresSaleReceiptRepository(manager),
       };
       return operation(ports);
     });

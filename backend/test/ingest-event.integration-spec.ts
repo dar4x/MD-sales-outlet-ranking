@@ -14,7 +14,12 @@ import {
 import type { SaleInput } from '../src/events/domain/event.js';
 import type { Clock } from '../src/shared/application/ports/clock.js';
 import { PostgresTransactionRunner } from '../src/shared/infrastructure/postgres-transaction-runner.js';
-import { ALMATY_OUTLET_ID, BISHKEK_OUTLET_ID } from './seed-data.js';
+import {
+  ALMATY_OUTLET_ID,
+  BISHKEK_OUTLET_ID,
+  BREAD_PRODUCT_ID,
+  MILK_PRODUCT_ID,
+} from './seed-data.js';
 
 // Requires a running PostgreSQL with migrations applied (npm run migration:run).
 // Each test uses a fresh event_id, so no table cleanup is needed.
@@ -40,14 +45,14 @@ function buildSale(eventId: string): SaleInput {
     lines: [
       {
         sale_line_id: randomUUID(),
-        product_id: randomUUID(),
+        product_id: BREAD_PRODUCT_ID,
         quantity: 2,
         unit_price_minor: 5000n,
         line_amount_minor: 10000n,
       },
       {
         sale_line_id: randomUUID(),
-        product_id: randomUUID(),
+        product_id: MILK_PRODUCT_ID,
         quantity: 1,
         unit_price_minor: 2500n,
         line_amount_minor: 2500n,
@@ -64,7 +69,19 @@ async function countLedgerRows(eventId: string): Promise<number> {
   return Number(rows[0]?.count);
 }
 
-await describe('IngestEvent (ledger only)', async () => {
+async function countReceiptRows(
+  receiptId: string,
+): Promise<{ receipts: number; lines: number }> {
+  const rows: { receipts: string; lines: string }[] = await dataSource.query(
+    `SELECT
+       (SELECT count(*) FROM sale_receipts WHERE receipt_id = $1) AS receipts,
+       (SELECT count(*) FROM sale_lines WHERE receipt_id = $1) AS lines`,
+    [receiptId],
+  );
+  return { receipts: Number(rows[0]?.receipts), lines: Number(rows[0]?.lines) };
+}
+
+await describe('IngestEvent', async () => {
   before(() => dataSource.initialize());
   after(() => dataSource.destroy());
 
@@ -90,6 +107,83 @@ await describe('IngestEvent (ledger only)', async () => {
     });
   });
 
+  await it('stores the receipt and its lines with the accepted event', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const sale = buildSale(randomUUID());
+
+    await ingestEvent.execute(sale);
+
+    const receiptRows: {
+      event_id: string;
+      outlet_id: string;
+      occurred_at: Date;
+      gross_amount_minor: string;
+    }[] = await dataSource.query(
+      `SELECT event_id, outlet_id, occurred_at, gross_amount_minor
+       FROM sale_receipts WHERE receipt_id = $1`,
+      [sale.receipt_id],
+    );
+    assert.deepEqual(receiptRows, [
+      {
+        event_id: sale.event_id,
+        outlet_id: BISHKEK_OUTLET_ID,
+        occurred_at: new Date('2026-10-13T06:00:00Z'),
+        gross_amount_minor: '12500',
+      },
+    ]);
+
+    const lineRows: {
+      sale_line_id: string;
+      product_id: string;
+      quantity: number;
+      unit_price_minor: string;
+      line_amount_minor: string;
+    }[] = await dataSource.query(
+      `SELECT sale_line_id, product_id, quantity, unit_price_minor,
+              line_amount_minor
+       FROM sale_lines WHERE receipt_id = $1 ORDER BY line_amount_minor DESC`,
+      [sale.receipt_id],
+    );
+    assert.deepEqual(lineRows, [
+      {
+        sale_line_id: sale.lines[0]!.sale_line_id,
+        product_id: BREAD_PRODUCT_ID,
+        quantity: 2,
+        unit_price_minor: '5000',
+        line_amount_minor: '10000',
+      },
+      {
+        sale_line_id: sale.lines[1]!.sale_line_id,
+        product_id: MILK_PRODUCT_ID,
+        quantity: 1,
+        unit_price_minor: '2500',
+        line_amount_minor: '2500',
+      },
+    ]);
+  });
+
+  await it('rolls back the accepted event when a line cannot be stored', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const sale = buildSale(randomUUID());
+    // The second line references a product that is not seeded, so its
+    // INSERT fails after the ledger row and the receipt row were written.
+    sale.lines[1] = { ...sale.lines[1]!, product_id: randomUUID() };
+
+    await assert.rejects(ingestEvent.execute(sale), /foreign key constraint/);
+
+    assert.equal(await countLedgerRows(sale.event_id), 0);
+    assert.deepEqual(await countReceiptRows(sale.receipt_id), {
+      receipts: 0,
+      lines: 0,
+    });
+  });
+
   await it('returns the original acceptance for an identical retry', async () => {
     const clock = new FakeClock();
     const ingestEvent = new IngestEvent(
@@ -106,6 +200,10 @@ await describe('IngestEvent (ledger only)', async () => {
     assert.equal(retry.acceptance.duplicate, true);
     assert.equal(retry.acceptance.accepted_at, FIRST_ACCEPTED_AT);
     assert.equal(await countLedgerRows(sale.event_id), 1);
+    assert.deepEqual(await countReceiptRows(sale.receipt_id), {
+      receipts: 1,
+      lines: 2,
+    });
   });
 
   await it('treats reordered lines and another offset as the same event', async () => {
@@ -149,6 +247,10 @@ await describe('IngestEvent (ledger only)', async () => {
 
     await assert.rejects(ingestEvent.execute(sale), EventValidationError);
     assert.equal(await countLedgerRows(sale.event_id), 0);
+    assert.deepEqual(await countReceiptRows(sale.receipt_id), {
+      receipts: 0,
+      lines: 0,
+    });
   });
 
   await it('creates once and reports duplicates for 10 parallel identical calls', async () => {
@@ -176,6 +278,10 @@ await describe('IngestEvent (ledger only)', async () => {
     assert.equal(createdCount, 1);
     assert.equal(duplicateCount, 9);
     assert.equal(await countLedgerRows(sale.event_id), 1);
+    assert.deepEqual(await countReceiptRows(sale.receipt_id), {
+      receipts: 1,
+      lines: 2,
+    });
   });
 
   await it('creates once and conflicts the rest for 10 parallel different payloads', async () => {
