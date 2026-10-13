@@ -17,5 +17,5 @@ export interface AlertEvaluation {
   responsible_person: ResponsiblePerson;
 }
 export interface AlertEvaluationQuery {
-  list(asOf: UtcTimestamp): Promise<AlertEvaluation[]>;
+  list(asOf: UtcTimestamp, outletId?: Identifier): Promise<AlertEvaluation[]>;
 }

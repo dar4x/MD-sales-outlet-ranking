@@ -80,7 +80,11 @@ export class PostgresRankingQuery implements RankingQuery {
             THEN round((net - previous) * 10000 / previous) ELSE NULL END,
           'is_leader', outlet_count > 1 AND maximum_net > minimum_net AND rank = 1,
           'is_laggard', outlet_count > 1 AND maximum_net > minimum_net AND rank = outlet_count,
-          'stale', false, 'behind_plan', false
+          'stale', EXISTS(SELECT 1 FROM alert_episodes a WHERE a.outlet_id=ranked.outlet_id AND a.kind='stale'
+            AND a.opened_at<=ranked.as_of AND (a.resolved_at IS NULL OR a.resolved_at>ranked.as_of)),
+          'behind_plan', EXISTS(SELECT 1 FROM alert_episodes a WHERE a.outlet_id=ranked.outlet_id AND a.kind='behind_plan'
+            AND a.local_date=(ranked.as_of AT TIME ZONE ranked.time_zone)::date
+            AND a.opened_at<=ranked.as_of AND (a.resolved_at IS NULL OR a.resolved_at>ranked.as_of))
         ) ORDER BY rank) FROM ranked
       ), '[]'::jsonb) AS rows FROM instant i
       `,
