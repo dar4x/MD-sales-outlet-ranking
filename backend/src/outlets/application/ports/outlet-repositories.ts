@@ -14,7 +14,6 @@ export interface OutletRepository {
 }
 export interface OutletQuery {
   list(): Promise<OutletSummary[]>;
-  find(outletId: Identifier): Promise<Outlet | null>;
 }
 export interface OutletCardQuery {
   get(
