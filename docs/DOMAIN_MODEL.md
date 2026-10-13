@@ -45,7 +45,9 @@ SaleReceipt contains receipt/event/outlet IDs, occurred_at, gross_amount_minor,
 and ReceiptLine[] (product, quantity, unit price, line amount, returned totals).
 ReturnEvent contains event/outlet/receipt IDs, occurred_at, derived amount and
 ReturnLine[]; input lines contain only IDs and quantity, never amount.
-AcceptedEvent stores canonical semantic input/hash and original acceptance.
+AcceptedEvent stores the payload hash, canonical payload (jsonb, audit only),
+occurred_at, amount and accepted_at; the acceptance response is rebuilt from
+these columns, with duplicate set by the caller.
 Outlet includes activated_at and nullable last_accepted_at, no settings version.
 Product contains seeded id/sku/name/current price; receipt price is historical.
 AlertEpisode contains IDs, date when relevant, opened/resolved timestamps and
@@ -58,8 +60,9 @@ Query models contain wire-safe strings, not aggregates or TypeORM entities.
 
 ## Transaction invariants and concurrency
 
-- Same event_id + same canonical business content: 200 original result; otherwise 409. Canonical input normalizes offsets/money and line ordering; hash is an
-  accelerator, canonical content decides equality. Duplicate retries do not
+- Same event_id + same payload hash: 200 original result; otherwise 409.
+  Canonical input normalizes offsets/money and key/line ordering before
+  hashing; the hash alone decides equality. Duplicate retries do not
   change last_accepted_at or enqueue refresh/email work.
 - Global sale receipt ID uniqueness rejects different event IDs. All line IDs
   are unique within their owning receipt/event. Product references must exist.
