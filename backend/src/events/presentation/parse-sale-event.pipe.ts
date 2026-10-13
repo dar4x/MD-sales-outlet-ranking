@@ -62,8 +62,8 @@ export class ParseSaleEventPipe implements PipeTransform<unknown, SaleInput> {
     const lines: SaleLine[] = [];
     for (const line of dto.lines) {
       lines.push({
-        sale_line_id: line.sale_line_id,
-        product_id: line.product_id,
+        sale_line_id: line.sale_line_id.toLowerCase(),
+        product_id: line.product_id.toLowerCase(),
         quantity: line.quantity,
         // Safe: MONEY_PATTERN allows only digits.
         unit_price_minor: BigInt(line.unit_price_minor),
@@ -72,9 +72,9 @@ export class ParseSaleEventPipe implements PipeTransform<unknown, SaleInput> {
     }
     return {
       kind: 'sale',
-      event_id: dto.event_id,
-      receipt_id: dto.receipt_id,
-      outlet_id: dto.outlet_id,
+      event_id: dto.event_id.toLowerCase(),
+      receipt_id: dto.receipt_id.toLowerCase(),
+      outlet_id: dto.outlet_id.toLowerCase(),
       occurred_at: dto.occurred_at,
       lines,
     };

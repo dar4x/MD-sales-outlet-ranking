@@ -225,4 +225,19 @@ await describe('ParseSaleEventPipe', async () => {
       );
     }
   });
+  await it('normalizes every UUID to lowercase', () => {
+    const id = 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA';
+    const body = buildBodyWithLine({ sale_line_id: id, product_id: id });
+    const sale = new ParseSaleEventPipe().transform({
+      ...body,
+      event_id: id,
+      receipt_id: id,
+      outlet_id: id,
+    });
+    assert.equal(sale.event_id, id.toLowerCase());
+    assert.equal(sale.receipt_id, id.toLowerCase());
+    assert.equal(sale.outlet_id, id.toLowerCase());
+    assert.equal(sale.lines[0]?.sale_line_id, id.toLowerCase());
+    assert.equal(sale.lines[0]?.product_id, id.toLowerCase());
+  });
 });

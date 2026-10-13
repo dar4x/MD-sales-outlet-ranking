@@ -220,4 +220,38 @@ await describe('POST /api/events', async () => {
     assert.equal(result.status, 422);
     assert.equal(result.json.code, 'timestamp_precision');
   });
+  await it('returns the original acceptance when UUID casing changes', async () => {
+    const body = buildSaleBody(randomUUID());
+    const first = await postEvent(body);
+    const lines = body.lines as Record<string, unknown>[];
+    const retry = await postEvent({
+      ...body,
+      event_id: String(body.event_id).toUpperCase(),
+      receipt_id: String(body.receipt_id).toUpperCase(),
+      outlet_id: String(body.outlet_id).toUpperCase(),
+      lines: lines.map((line) => ({
+        ...line,
+        sale_line_id: String(line.sale_line_id).toUpperCase(),
+        product_id: String(line.product_id).toUpperCase(),
+      })),
+    });
+    assert.equal(first.status, 201);
+    assert.equal(retry.status, 200);
+    assert.deepEqual(retry.json, { ...first.json, duplicate: true });
+  });
+
+  await it('returns 422 for sale line IDs differing only in UUID casing', async () => {
+    const body = buildSaleBody(randomUUID());
+    const lines = body.lines as Record<string, unknown>[];
+    const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const result = await postEvent({
+      ...body,
+      lines: [
+        { ...lines[0], sale_line_id: id },
+        { ...lines[1], sale_line_id: id.toUpperCase() },
+      ],
+    });
+    assert.equal(result.status, 422);
+    assert.equal(result.json.code, 'duplicate_line_id');
+  });
 });
