@@ -607,4 +607,51 @@ await describe('IngestEvent', async () => {
       lines: 2,
     });
   });
+
+  await it(
+    'decides an unknown-outlet change by what is committed when it runs',
+    { timeout: 10000 },
+    async () => {
+      const ingestEvent = new IngestEvent(
+        new PostgresTransactionRunner(dataSource),
+        new FakeClock(),
+      );
+      const sale = buildSale(randomUUID());
+      const changedSale: SaleInput = { ...sale, outlet_id: randomUUID() };
+
+      // Simulates request A in the middle of its transaction: its ledger row
+      // is inserted but not committed yet.
+      const requestA = dataSource.createQueryRunner();
+      await requestA.connect();
+      await requestA.startTransaction();
+      try {
+        await requestA.query(
+          `INSERT INTO accepted_events (
+             event_id, kind, outlet_id, occurred_at, payload_hash,
+             canonical_payload, amount_minor, accepted_at
+           )
+           VALUES ($1, 'sale', $2, $3, 'hash-a', '{}'::jsonb, 0, $3)`,
+          [sale.event_id, sale.outlet_id, '2026-10-13T06:00:00Z'],
+        );
+
+        // Request B does not wait for A: the event is not accepted yet, so B
+        // sees an unknown outlet (422). This equals the serial order B, A.
+        await assert.rejects(
+          ingestEvent.execute(changedSale),
+          assertValidationCode('unknown_outlet'),
+        );
+
+        await requestA.commitTransaction();
+      } finally {
+        await requestA.release();
+      }
+
+      // Once A has committed, the same request is a changed payload for an
+      // accepted event_id (409), as the contract requires.
+      await assert.rejects(
+        ingestEvent.execute(changedSale),
+        EventConflictError,
+      );
+    },
+  );
 });
