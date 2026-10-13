@@ -705,3 +705,42 @@ test('remaining API clients expose business errors and reject malformed list res
   await assert.rejects(getAlerts(true, '', signal), /Unexpected alerts/);
   await assert.rejects(getProducts(signal), /Unexpected products/);
 });
+
+// Formatting must retain exact basis points and reject unsafe numeric values.
+test('presentation formats basis points without floating point rounding', async () => {
+  const { formatBasisPoints, formatDateTime } = await vite.ssrLoadModule(
+    '/src/presentation/format.ts',
+  );
+  assert.equal(formatBasisPoints(19679), '+196.79%');
+  assert.equal(formatBasisPoints(-1), '-0.01%');
+  assert.equal(formatBasisPoints(0), '0.00%');
+  assert.equal(
+    formatBasisPoints(Number.MAX_SAFE_INTEGER),
+    '+90071992547409.91%',
+  );
+  for (const value of [null, NaN, Infinity, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(formatBasisPoints(value), '—');
+  }
+  assert.equal(formatDateTime('2026-10-13T17:40:00Z'), 'Oct 13, 2026, 17:40');
+});
+
+test('window controls preserve the contract windows and selected state', async () => {
+  const { WindowControl } = await vite.ssrLoadModule(
+    '/src/components/WindowControl.tsx',
+  );
+  const html = renderToStaticMarkup(
+    createElement(WindowControl, { value: 'hour', onChange: () => {} }),
+  );
+  const inputs = [...html.matchAll(/<input[^>]+>/g)].map(([input]) => input);
+  assert.match(
+    inputs.find((input) => input.includes('value="hour"')),
+    /checked=""/,
+  );
+  assert.doesNotMatch(
+    inputs.find((input) => input.includes('value="business_day"')),
+    /checked/,
+  );
+  assert.match(html, /value="business_day"/);
+  assert.match(html, /Last hour/);
+  assert.match(html, /Business day/);
+});

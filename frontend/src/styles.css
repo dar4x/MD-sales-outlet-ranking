@@ -1077,20 +1077,6 @@ thead th {
   outline: 2px solid #6767a0;
   outline-offset: 3px;
 }
-.table-hint {
-  display: none;
-}
-
-@media (max-width: 1200px) {
-  .table-hint {
-    display: block;
-    padding: 9px 16px;
-    font-size: 11px;
-    color: var(--muted);
-    border-bottom: 1px solid var(--border);
-    background: #fdfdfd;
-  }
-}
 @media (max-width: 600px) {
   .outlet-toolbar {
     align-items: flex-end;
@@ -1130,5 +1116,17 @@ thead th {
     color: var(--muted);
     border-bottom: 1px solid var(--border);
     background: #fdfdfd;
+  }
+}
+
+.metric-value.exact-decimal {
+  font-size: 18px;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+@media (max-width: 600px) {
+  .detail-stats {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

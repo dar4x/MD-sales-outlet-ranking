@@ -33,7 +33,7 @@ export function OutletCardView({ card }: { card: OutletCard }) {
         </div>
         <div className="metric-card">
           <dt className="metric-label">Average check</dt>
-          <dd className="metric-value long">
+          <dd className="metric-value exact-decimal">
             {card.metrics.average_check_minor ?? '—'}
           </dd>
           <span className="metric-note">Minor units per receipt</span>
