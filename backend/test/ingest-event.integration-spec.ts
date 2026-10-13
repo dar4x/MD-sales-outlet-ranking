@@ -14,6 +14,7 @@ import {
 import type { SaleInput } from '../src/events/domain/event.js';
 import type { Clock } from '../src/shared/application/ports/clock.js';
 import { PostgresTransactionRunner } from '../src/shared/infrastructure/postgres-transaction-runner.js';
+import { ALMATY_OUTLET_ID, BISHKEK_OUTLET_ID } from './seed-data.js';
 
 // Requires a running PostgreSQL with migrations applied (npm run migration:run).
 // Each test uses a fresh event_id, so no table cleanup is needed.
@@ -34,7 +35,7 @@ function buildSale(eventId: string): SaleInput {
     kind: 'sale',
     event_id: eventId,
     receipt_id: randomUUID(),
-    outlet_id: randomUUID(),
+    outlet_id: BISHKEK_OUTLET_ID,
     occurred_at: '2026-10-13T12:00:00+06:00',
     lines: [
       {
@@ -132,7 +133,7 @@ await describe('IngestEvent (ledger only)', async () => {
     );
     const sale = buildSale(randomUUID());
     await ingestEvent.execute(sale);
-    const changedSale: SaleInput = { ...sale, outlet_id: randomUUID() };
+    const changedSale: SaleInput = { ...sale, outlet_id: ALMATY_OUTLET_ID };
 
     await assert.rejects(ingestEvent.execute(changedSale), EventConflictError);
     assert.equal(await countLedgerRows(sale.event_id), 1);
@@ -184,11 +185,18 @@ await describe('IngestEvent (ledger only)', async () => {
     );
     const eventId = randomUUID();
 
-    // Same event_id, but every call has its own outlet_id, so each payload
-    // hash is different.
+    // Same event_id and outlet, but every call has its own quantity on the
+    // first line, so each payload hash is different.
     const calls = [];
     for (let index = 0; index < 10; index += 1) {
-      calls.push(ingestEvent.execute(buildSale(eventId)));
+      const sale = buildSale(eventId);
+      const quantity = index + 1;
+      sale.lines[0] = {
+        ...sale.lines[0]!,
+        quantity,
+        line_amount_minor: BigInt(quantity) * sale.lines[0]!.unit_price_minor,
+      };
+      calls.push(ingestEvent.execute(sale));
     }
     const results = await Promise.allSettled(calls);
 

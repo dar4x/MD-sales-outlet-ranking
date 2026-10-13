@@ -8,11 +8,12 @@ import 'reflect-metadata';
 import dataSource from '../src/database/data-source.js';
 import type { AcceptedEvent } from '../src/events/domain/event.js';
 import { PostgresEventLedgerRepository } from '../src/events/infrastructure/postgres-event-ledger.repository.js';
+import { BISHKEK_OUTLET_ID } from './seed-data.js';
 
 // Requires a running PostgreSQL with migrations applied (npm run migration:run).
 // Each test uses a fresh event_id, so no table cleanup is needed.
 function buildAcceptedEvent(eventId: string): AcceptedEvent {
-  const outletId = randomUUID();
+  const outletId = BISHKEK_OUTLET_ID;
   const occurredAt = '2026-10-13T06:00:00.000Z';
   return {
     event_id: eventId,

@@ -9,10 +9,11 @@ import dataSource from '../src/database/data-source.js';
 import type { AcceptedEvent } from '../src/events/domain/event.js';
 import { PostgresEventLedgerRepository } from '../src/events/infrastructure/postgres-event-ledger.repository.js';
 import { PostgresTransactionRunner } from '../src/shared/infrastructure/postgres-transaction-runner.js';
+import { BISHKEK_OUTLET_ID } from './seed-data.js';
 
 // Requires a running PostgreSQL with migrations applied (npm run migration:run).
 function buildAcceptedEvent(eventId: string): AcceptedEvent {
-  const outletId = randomUUID();
+  const outletId = BISHKEK_OUTLET_ID;
   return {
     event_id: eventId,
     canonical_payload: JSON.stringify({ event_id: eventId, kind: 'sale' }),
