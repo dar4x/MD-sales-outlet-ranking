@@ -2,6 +2,7 @@ export class AlertScheduler {
   private timer: ReturnType<typeof setInterval> | undefined;
   private running = false;
   private stopped = false;
+  private active: Promise<void> | undefined;
   constructor(
     private readonly evaluate: () => Promise<void>,
     private readonly intervalMs: number,
@@ -9,7 +10,7 @@ export class AlertScheduler {
   ) {}
   onModuleInit(): void {
     this.timer = setInterval(() => {
-      void this.tick();
+      if (!this.running && !this.stopped) this.active = this.tick();
     }, this.intervalMs);
   }
   async tick(): Promise<void> {
@@ -23,8 +24,9 @@ export class AlertScheduler {
       this.running = false;
     }
   }
-  onModuleDestroy(): void {
+  async onModuleDestroy(): Promise<void> {
     this.stopped = true;
     clearInterval(this.timer);
+    await this.active;
   }
 }

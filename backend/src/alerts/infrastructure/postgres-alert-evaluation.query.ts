@@ -5,7 +5,11 @@ import type {
 } from '../application/ports/alert-evaluation-query.js';
 export class PostgresAlertEvaluationQuery implements AlertEvaluationQuery {
   constructor(private readonly database: Pick<DataSource, 'query'>) {}
-  async list(asOf: string, outletId?: string): Promise<AlertEvaluation[]> {
+  async list(
+    asOf: string,
+    outletId?: string,
+    localDate?: string,
+  ): Promise<AlertEvaluation[]> {
     const rows: {
       outlet_id: string;
       local_date: string;
@@ -20,11 +24,11 @@ export class PostgresAlertEvaluationQuery implements AlertEvaluationQuery {
     }[] = await this.database.query(
       `
       WITH bounds AS (
-        SELECT o.*,($1::timestamptz AT TIME ZONE time_zone)::date AS local_date,
+        SELECT o.*,COALESCE($3::date,($1::timestamptz AT TIME ZONE time_zone)::date) AS local_date,
           -- Convert civil noon/midnight back to UTC using the outlet's IANA rules.
-          ((($1::timestamptz AT TIME ZONE time_zone)::date+time '12:00') AT TIME ZONE time_zone) AS cutoff_at,
-          ((($1::timestamptz AT TIME ZONE time_zone)::date+1)::timestamp AT TIME ZONE time_zone) AS next_midnight_at,
-          (($1::timestamptz AT TIME ZONE time_zone)::date::timestamp AT TIME ZONE time_zone) AS midnight
+          ((COALESCE($3::date,($1::timestamptz AT TIME ZONE time_zone)::date)+time '12:00') AT TIME ZONE time_zone) AS cutoff_at,
+          ((COALESCE($3::date,($1::timestamptz AT TIME ZONE time_zone)::date)+1)::timestamp AT TIME ZONE time_zone) AS next_midnight_at,
+          (COALESCE($3::date,($1::timestamptz AT TIME ZONE time_zone)::date)::timestamp AT TIME ZONE time_zone) AS midnight
         FROM outlets o WHERE activated_at<=$1 AND ($2::uuid IS NULL OR outlet_id=$2)
       )
       SELECT b.outlet_id,b.local_date::text,COALESCE(last_accepted_at,activated_at) AS last_activity_at,
@@ -35,7 +39,7 @@ export class PostgresAlertEvaluationQuery implements AlertEvaluationQuery {
           AND r.occurred_at>=b.midnight AND r.occurred_at<b.cutoff_at),0))::text AS noon_net_revenue_minor,
         responsible_name,responsible_email FROM bounds b ORDER BY b.outlet_id
     `,
-      [asOf, outletId ?? null],
+      [asOf, outletId ?? null, localDate ?? null],
     );
     return rows.map((row) => ({
       outlet_id: row.outlet_id,
@@ -51,5 +55,19 @@ export class PostgresAlertEvaluationQuery implements AlertEvaluationQuery {
         email: row.responsible_email,
       },
     }));
+  }
+  missedNoons(
+    asOf: string,
+  ): Promise<{ outlet_id: string; local_date: string }[]> {
+    return this.database.query(
+      `SELECT o.outlet_id,d.day::date::text AS local_date FROM outlets o
+      -- Generate civil dates, then convert each noon using IANA rules; never subtract 24 hours.
+      CROSS JOIN LATERAL generate_series((o.activated_at AT TIME ZONE o.time_zone)::date::timestamp,
+        ($1::timestamptz AT TIME ZONE o.time_zone)::date::timestamp,interval '1 day') AS d(day)
+      WHERE o.activated_at<=$1 AND ((d.day::date+time '12:00') AT TIME ZONE o.time_zone)<=$1
+      AND NOT EXISTS(SELECT 1 FROM midday_assessments m WHERE m.outlet_id=o.outlet_id AND m.local_date=d.day::date)
+      ORDER BY o.outlet_id,d.day`,
+      [asOf],
+    );
   }
 }
