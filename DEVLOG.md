@@ -647,3 +647,60 @@ and atomic episode/outbox records give less coupling without redundant handlers.
   transport behavior and limitations. Earlier foundation checks are labeled
   historical. Other browsers, deployment and visual design remain unverified.
   Outlet details were not started. No merge to dev or main was performed.
+
+
+## Functional frontend MVP completion — 2026-10-13
+
+- Resumed the existing feature/dashboard after the second laptop shutdown.
+  All dashboard commits through 626155e survived; README was already committed
+  and had no unfinished edit. Only MYLOG.md remained modified, with the same
+  recorded checksum. Restarted stopped Compose, compiled backend and frontend;
+  did not rebuild or refactor backend, recreate branches or discard work.
+- Added outlet list/selection, exact card HTTP reads for both contract windows,
+  metrics, daily plan, top products and UTC series tables. Card numeric average
+  checks stay strings, including fractional averages. Existing extreme test data
+  has aggregate quantities/progress outside the safe-number range; display
+  labels those fields instead of rejecting the whole card or claiming precision.
+- Added GET/PATCH settings with positive bigint-range string plan validation,
+  changed-field patches, responsible name/email editing, save/error/success
+  states, request cancellation, and automatic card refresh after a save.
+  Real Chromium test persisted plan 9007199254740993 plus name/email via PATCH,
+  verified GET/reload equality, then restored the original plan/contact through
+  the API. A subsequent real production read verified restoration.
+- Added active/history alerts with supported outlet filter, captured episode
+  facts and recipients, and the product catalogue with exact price strings.
+  No extra endpoints, backend imports, entry forms, dependencies or styling work.
+- Final frontend typecheck, lint, format:check, build and tests passed:
+  19 tests, zero failures. Added tests for all independent shapes, exact API
+  requests, changed-field PATCHes, huge money, decimal averages, malformed/error
+  replies, tables and safe-display handling. All original socket tests remain.
+- Final relevant backend checks passed without rebuilding the backend:
+  typecheck, lint, format:check, and 52 non-destructive tests (all unit tests plus
+  real PostgreSQL health and ranking timer e2e). The full destructive suite was
+  not run. No migrations, resets, truncation or deletion commands were used.
+- Real HTTP checks returned 200 for both ranking windows, outlet list, both card
+  windows, settings, active/all/outlet-filtered alerts and products. Removed ping
+  returned 404; health returned 200. Browser active alert counts vary normally as
+  simulator activity resolves stale episodes.
+- Actual Chromium development and production flows passed: outlet card window
+  switching, settings persistence, filtered/historical alerts, six products and
+  navigation back to live rankings. Production rapid window switching and page
+  refresh passed. Both tabs kept tables during backend stop and regained live
+  updates after restart without reload. Fresh full-flow production page had no
+  console errors/warnings; intentional outages emitted expected network errors.
+- Actual final production simulator run: 19 Almaty sales, zero rejected/failed;
+  PostgreSQL receipt count 901 -> 920. Both hour and business_day tabs updated
+  without reload (observed receipt counts 52 -> 70 and 87 -> 105 while the run was
+  active). Simulator stopped with final created=19; its data was retained.
+- Mocked browser checks passed outlet loading/empty state, card/settings errors,
+  settings saving/disabled fields, retained edits after failed PATCH, successful
+  retry, and product/alert error -> retry -> empty states. No real settings writes
+  were made in those mocked checks.
+- Known limits: card/alerts/products are HTTP snapshots with explicit refresh;
+  only rankings has a server push protocol. Existing trailing backend coalescing
+  can delay updates during uninterrupted high-rate bursts. Unsafe aggregate
+  numeric quantity/progress fields are visibly labeled. Other browsers,
+  deployment, visual design and the destructive full backend suite are unverified.
+- Existing MYLOG.md edit is untouched and unstaged. All MVP code is committed on
+  feature/dashboard. README documents the complete basic interface and checks.
+  PR targets dev; merging remains the developer's decision.

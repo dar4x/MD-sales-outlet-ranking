@@ -3,8 +3,9 @@
 Retail-chain ranking dashboard backed by PostgreSQL and NestJS. The independent
 React frontend loads rankings over HTTP and receives live Socket.IO snapshots.
 The backend implements sale/return ingestion, outlet cards/settings, products,
-alerts and email delivery; only rankings are connected to the frontend so far.
-The interface uses a basic table with minimal CSS. Outlet details come next.
+alerts and email delivery. The frontend connects rankings, outlet details and
+settings, alerts and the product catalogue. The interface uses basic HTML with
+minimal CSS; sales and returns come from the simulator.
 
 Prerequisites: Node.js 24.11 or newer (observed `v24.21.0`), npm, Docker Engine,
 and Docker Compose v2.
@@ -148,6 +149,28 @@ npm --prefix simulator start -- --outlet 'Almaty Mall' --rate 30 --seed dashboar
 Both tabs should update without reload. Stop the simulator with Ctrl+C; its
 accepted sales remain in PostgreSQL. No database reset is needed.
 
+The **Outlets** screen loads GET /api/outlets and lets you select an outlet.
+Its card uses GET /api/outlets/:id/card with `hour` or `business_day` and displays
+net revenue, receipts, average check, today's plan/progress, top products and UTC
+sales buckets as a table. Use **Refresh outlet card** for fresh statistics.
+Card money/averages are shown as the exact minor-unit strings returned by the API;
+the card response does not include currency. Unsafe numeric aggregate quantities
+or plan progress are labeled **Outside safe display range**, rather than rounded
+again in the UI. This affects extreme historical test data; the backend is unchanged.
+
+Outlet settings load separately through GET /api/outlets/:id/settings. Edit the
+positive integer `daily_plan_minor`, responsible name and email, then **Save
+settings** sends PATCH to the same path with only changed fields. Money remains a
+string. Saving disables inputs, reports success/errors, retains failed edits and
+refreshes the card after success. **Reload settings** reads persisted values.
+
+The **Alerts** screen uses GET /api/alerts with `active_only=true` by default.
+Select an outlet to add the supported `outlet_id` filter; uncheck **Active alerts
+only** to include history. It displays stale/behind-plan kinds, active/resolved
+state and captured facts/recipients. Alerts have no socket event; use **Refresh
+alerts**. The **Products** screen reads GET /api/products and displays SKU, name
+and exact minor-unit prices. All screens show loading/error/empty states.
+
 Quality and production commands:
 
 ```sh
@@ -286,13 +309,13 @@ feature work is pushed for review, and the developer approves merges. After each
 merge the assistant runs `git checkout dev` and `git pull` before starting the next feature.
 A release branch is created from `dev` only at the end.
 
-## Dashboard verification — 2026-10-13
+## Functional frontend verification — 2026-10-13
 
 | Check | Result |
 | --- | --- |
 | Frontend typecheck, lint, format, build | Passed |
-| Frontend `npm test` | 10 passed; uses node:test and the existing Vite transform, no added dependencies |
-| Backend typecheck, lint, format, build | Passed after demo removal |
+| Frontend `npm test` | 19 passed; uses node:test and the existing Vite transform, no added dependencies |
+| Backend typecheck, lint, format | Passed again in the final MVP; the existing compiled backend was reused |
 | Non-destructive backend tests above | 52 passed, including real PostgreSQL health and periodic Socket.IO snapshots |
 | Real PostgreSQL to browser integration | Both windows rendered all 41 existing outlets; Bishkek business-day revenue `55340232221132258342` and 166 receipts matched direct SQL |
 | Two actual Playwright Chromium tabs | Real simulator sales changed revenue/counts without reload; independent window subscriptions and saved-window reload passed |
@@ -302,10 +325,15 @@ A release branch is created from `dev` only at the end.
 | WebSocket handshake failure | Real polling fallback and periodic snapshots passed with the WebSocket URL deliberately redirected to a missing route |
 | Mocked browser edge states | Loading, empty, 503 error, retry recovery, blocked socket and blocked localStorage passed |
 | Full backend integration suite | Not run: its truncation hooks conflict with data-preservation requirement |
+| Outlet card and settings | Both windows, statistics, product/series tables and exact monetary strings passed; real PATCH/read-back persisted plan/name/email, then test edits were restored |
+| Alerts and products | Active-only/default and outlet/history filters passed; six product rows rendered; real HTTP requests returned 200 |
+| Form and list error states | Mocked loading/empty/503/retry passed; save disabled inputs during the request and retained edits on failure |
+| Final production simulator run | 19 new Almaty sales reached both hour/business_day tabs; PostgreSQL receipt count increased from 901 to 920 |
 | Other browsers, deployment, visual design | Not verified; design is deferred |
 
-The real simulator runs added 464 accepted sales (52 Almaty, 412 Moscow), with no
-rejections or failures. They remain in PostgreSQL. Historical test outlets were
+The first dashboard simulator runs added 464 sales (52 Almaty, 412 Moscow);
+the final production MVP check added 19 Almaty sales. All 483 remain in PostgreSQL,
+with no simulator rejections or failures. Settings test changes were restored. Historical test outlets were
 left in place. MYLOG.md's pre-existing edit was preserved and never staged.
 
 ## Earlier foundation verification (historical)
