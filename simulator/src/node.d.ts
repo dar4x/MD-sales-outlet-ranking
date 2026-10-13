@@ -34,3 +34,27 @@ declare module "node:assert/strict" {
 declare module "node:crypto" {
   export function randomUUID(): string;
 }
+declare module "node:http" {
+  export interface IncomingMessage {
+    url?: string;
+    method?: string;
+    socket: { destroy(): void };
+    setEncoding(encoding: string): void;
+    on(event: "data", listener: (chunk: string) => void): void;
+    on(event: "end", listener: () => void): void;
+  }
+  export interface ServerResponse {
+    statusCode: number;
+    setHeader(name: string, value: string): void;
+    end(body?: string): void;
+  }
+  export interface Server {
+    listen(port: number, host: string, callback: () => void): void;
+    address(): { port: number } | null;
+    close(callback: (error?: Error) => void): void;
+    closeAllConnections(): void;
+  }
+  export function createServer(
+    handler: (request: IncomingMessage, response: ServerResponse) => void,
+  ): Server;
+}
