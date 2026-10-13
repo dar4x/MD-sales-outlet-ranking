@@ -108,4 +108,44 @@ await describe('validateSale', async () => {
 
     assertValidationError(sale, 'duplicate_line_id');
   });
+
+  await it('accepts a line amount equal to the bigint storage limit', () => {
+    const sale = buildSale();
+    sale.lines[0] = {
+      ...sale.lines[0]!,
+      quantity: 1,
+      unit_price_minor: 9223372036854775807n,
+      line_amount_minor: 9223372036854775807n,
+    };
+
+    assert.doesNotThrow(() => validateSale(sale));
+  });
+
+  await it('rejects a line amount above the bigint storage limit', () => {
+    const sale = buildSale();
+    sale.lines[0] = {
+      ...sale.lines[0]!,
+      quantity: 2,
+      unit_price_minor: 9223372036854775807n,
+      line_amount_minor: 18446744073709551614n,
+    };
+
+    assertValidationError(sale, 'amount_out_of_range');
+  });
+
+  await it('rejects a sale total above the limit when every line fits', () => {
+    const sale = buildSale();
+    const bigLine = {
+      ...sale.lines[0]!,
+      quantity: 1,
+      unit_price_minor: 9223372036854775807n,
+      line_amount_minor: 9223372036854775807n,
+    };
+    sale.lines = [
+      bigLine,
+      { ...bigLine, sale_line_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+    ];
+
+    assertValidationError(sale, 'amount_out_of_range');
+  });
 });

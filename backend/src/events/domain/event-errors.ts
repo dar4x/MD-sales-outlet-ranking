@@ -1,8 +1,10 @@
 // Business input that breaks a sale rule; presentation maps it to HTTP 422.
+// details lists field problems when a request body fails shape validation.
 export class EventValidationError extends Error {
   constructor(
     readonly code: string,
     message: string,
+    readonly details?: string[],
   ) {
     super(message);
     this.name = 'EventValidationError';

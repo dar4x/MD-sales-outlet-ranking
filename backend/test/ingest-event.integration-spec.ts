@@ -13,6 +13,7 @@ import {
   ReceiptConflictError,
 } from '../src/events/domain/event-errors.js';
 import type { SaleInput } from '../src/events/domain/event.js';
+import { PostgresEventLedgerRepository } from '../src/events/infrastructure/postgres-event-ledger.repository.js';
 import type { Clock } from '../src/shared/application/ports/clock.js';
 import type {
   TransactionPorts,
@@ -820,5 +821,39 @@ await describe('IngestEvent', async () => {
     }
     assert.notEqual(creatorAcceptedAt, null);
     assert.equal(await readLastAcceptedAt(outletId), creatorAcceptedAt);
+  });
+
+  await it('stores the largest storable amount exactly', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const sale = buildSale(randomUUID());
+    // One line at the bigint limit and one free line: the total is exactly
+    // the limit, which validateSale still accepts.
+    sale.lines[0] = {
+      ...sale.lines[0]!,
+      quantity: 1,
+      unit_price_minor: 9223372036854775807n,
+      line_amount_minor: 9223372036854775807n,
+    };
+    sale.lines[1] = {
+      ...sale.lines[1]!,
+      unit_price_minor: 0n,
+      line_amount_minor: 0n,
+    };
+
+    const result = await ingestEvent.execute(sale);
+
+    assert.equal(result.acceptance.amount_minor, 9223372036854775807n);
+    const rows: { gross_amount_minor: string }[] = await dataSource.query(
+      'SELECT gross_amount_minor FROM sale_receipts WHERE receipt_id = $1',
+      [sale.receipt_id],
+    );
+    assert.deepEqual(rows, [{ gross_amount_minor: '9223372036854775807' }]);
+    const stored = await new PostgresEventLedgerRepository(
+      dataSource.manager,
+    ).find(sale.event_id);
+    assert.equal(stored?.acceptance.amount_minor, 9223372036854775807n);
   });
 });
