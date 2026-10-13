@@ -72,3 +72,54 @@ Entries use local time from `date --iso-8601=seconds` and report only checks act
 - Passed negative config check: `VITE_SOCKET_URL= npm --prefix frontend run build` exited 1 naming VITE_SOCKET_URL. `rg -n -e '\bany\b' -e 'from.*backend' -e 'import.*backend' frontend/src frontend/vite.config.ts frontend/scripts` returned no matches (expected rg exit 1); lint enforces explicit-any and backend-import restrictions. Bundle scan for React development markers and the sample database-password marker also returned no matches.
 - Passed `docker compose up -d --wait`, backend start, frontend dev, and production preview. Closed only the two verification tabs, stopped own servers with Ctrl+C, and passed `docker compose down`; retained the database volume. Added .playwright-mcp to ignore generated verification artifacts.
 - Not verified: other browsers, a full accessibility audit, backend watch-mode restart, or the exact model label from /status (no session/model status tool is exposed). Business features, simulator, scheduling, SMTP worker, push, merge, and release branch are not implemented/performed here. Waiting for developer review and merge; README, DECISIONS.md, and this log were updated within this branch.
+
+## 2026-10-13T08:21:11+06:00 — feature/backend-domain-design
+
+- Received explicit approval for step 2 with eight simplifications and accepted
+  at-least-once email delivery. Stated use cases/ports in five lines, checked clean
+  dev and Node v24.21.0, ran git pull (already up to date), and created the branch
+  from feb4c6a. No push, merge, branch deletion, timestamp override or package install.
+- Added docs/API_CONTRACT.md and docs/DOMAIN_MODEL.md, pure domain records, query
+  models, application port interfaces, transaction-scoped port bundle and empty
+  infrastructure/presentation folders. No use-case implementation, module wiring,
+  migration, endpoint, gateway, business test or runtime change. README.md and
+  ARCHITECTURE.md were not modified; the existing dependency layers still apply.
+- Approved changes: no alerts.* socket events, flags inside ranking rows; no
+  outbox leases; hour dynamics only; last-write-wins settings; quantity-derived
+  return amount; validated sale line total; unique ranks ordered by outlet_id;
+  coalesced ranking refresh around configurable 250 ms. Recorded stable Message-ID
+  and the possible duplicate after SMTP acceptance followed by a worker crash.
+- Read only git show backup/first-pass:src/rankings.ts and both migrations
+  db/migrations/001_initial.sql and 002_outlet_activity.sql. Lessons: occurred_at
+  filtering, SQL numeric average, per-outlet local-midnight conversion, left joins
+  for zero-activity outlets and acceptance-time activity. These old queries were
+  not executed here. Re-read before future schema implementation; do not blindly
+  retain fractional quantities, old uniqueness scope or in-memory counters.
+- Passed: npm --prefix backend run typecheck (twice, including existing tests),
+  rtk proxy npm --prefix backend run lint, npm --prefix backend run format:check,
+  npm --prefix backend run build, git diff --check. Used the installed backend
+  Prettier binary to format only new docs/types. No failed checks. No current
+  Docker, browser, HTTP, WebSocket, migration or business behavior was tested;
+  the changes are type-only. Frontend checks were not rerun (frontend unchanged).
+- Exact time recorded with date --iso-8601=seconds. The precise /status model
+  label remains unavailable; DECISIONS preserves that limitation honestly.
+
+### Developer reasoning (verbatim prompt log)
+
+"по бизнес логике здесь один большой эндпоинт который высылает ивенты, а вот
+по интерфейсу уже масса use case которые делают настройку дают нужные данные.
+я думаю здесь есть смысл создать один агрегат и к нему подстроить методы,
+тогда в папках юзкейсах хэндлерах и репозитории будет обращение к одному
+агрегату и не будет много лишнего кода"
+
+Verdict: the desire to avoid redundant code is sound, but one endpoint is not one
+aggregate. A chain-wide aggregate couples independent outlet traffic, return
+validation, read queries and notification delivery. Two small aggregates
+(SaleReceipt and Outlet), one shared ingestion orchestration, read-query ports
+and atomic episode/outbox records give less coupling without redundant handlers.
+
+- Final scope check: git diff --name-only dev showed no README, architecture,
+  existing runtime or dependency changes. backend/node_modules/.bin/prettier
+  --check docs/API_CONTRACT.md docs/DOMAIN_MODEL.md passed. Source scan
+  `rg -n 'any|@nestjs|typeorm' backend/src/events backend/src/rankings backend/src/outlets backend/src/products backend/src/alerts backend/src/notifications backend/src/shared`
+  found no matches (expected exit 1, not a failed quality check).

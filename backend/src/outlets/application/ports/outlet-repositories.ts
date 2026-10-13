@@ -1,0 +1,25 @@
+import type {
+  Identifier,
+  RankingWindow,
+  UtcTimestamp,
+} from '../../../shared/domain/value-types.js';
+import type { Outlet, OutletSettingsPatch } from '../../domain/outlet.js';
+import type { OutletCard, OutletSummary } from '../read-models/outlet-card.js';
+export interface OutletRepository {
+  findForUpdate(outletId: Identifier): Promise<Outlet | null>;
+  updateSettings(
+    outletId: Identifier,
+    patch: OutletSettingsPatch,
+  ): Promise<Outlet | null>;
+}
+export interface OutletQuery {
+  list(): Promise<OutletSummary[]>;
+  find(outletId: Identifier): Promise<Outlet | null>;
+}
+export interface OutletCardQuery {
+  get(
+    outletId: Identifier,
+    window: RankingWindow,
+    asOf: UtcTimestamp,
+  ): Promise<OutletCard | null>;
+}

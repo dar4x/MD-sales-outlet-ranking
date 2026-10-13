@@ -35,3 +35,23 @@ The tool used is OpenAI Codex; the session identifies the agent as GPT-6, but th
 The developer chose AI assistance to accelerate scaffolding while retaining review and merge control; this record does not infer a more specific model variant.
 
 References: [PostgreSQL official image](https://hub.docker.com/_/postgres), [Mailpit Docker installation](https://mailpit.axllent.org/docs/install/docker/), [Docker Compose documentation](https://docs.docker.com/compose/).
+
+## Backend domain design
+
+- Developer-approved SaleReceipt and Outlet aggregate boundaries keep receipt
+  return invariants scoped while allowing five outlets to ingest concurrently.
+  Rankings/cards remain query models; a chain-wide aggregate was rejected because
+  endpoint count does not define a transactional boundary.
+- Domain amounts use bigint; transport money uses integer decimal strings, and
+  average check remains a SQL numeric decimal string. Return amounts are derived
+  from historical prices; sale line totals must match quantity times price.
+- A single rankings.snapshot channel includes alert flags; refresh requests
+  coalesce around an environment-configured 250 ms. Client window choice and
+  client-derived rank movement avoid stored UI preferences and extra channels.
+- Settings use last write wins; ranking ties use outlet_id for unique ranks;
+  business-day dynamics are postponed. One worker uses an outbox with attempts
+  and next_attempt_at, without leasing. Stable Message-ID and a unique job per
+  episode support at-least-once delivery; SMTP can duplicate after a crash.
+- This branch introduces docs and type-only interfaces, not implementations or
+  schema. Backup SQL/migrations were read for lessons and must be re-read before
+  schema implementation. Existing ARCHITECTURE.md layers and README are unchanged.
