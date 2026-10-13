@@ -22,5 +22,7 @@ export type RealtimeSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 export function createRealtimeClient(): RealtimeSocket {
   return io(import.meta.env.VITE_SOCKET_URL, {
     autoConnect: false,
+    transports: ['websocket', 'polling'],
+    tryAllTransports: true,
   });
 }
