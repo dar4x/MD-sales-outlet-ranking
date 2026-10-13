@@ -64,11 +64,29 @@ export class RankingsGateway implements RankingPublisher {
   }
 
   @SubscribeMessage('rankings.unsubscribe')
-  unsubscribe(@ConnectedSocket() client: Socket): { ok: true } {
+  unsubscribe(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: unknown,
+  ): { ok: boolean; error?: { code: string; message: string } } {
+    if (
+      typeof payload !== 'object' ||
+      payload === null ||
+      Array.isArray(payload) ||
+      Object.keys(payload).length !== 0
+    ) {
+      return {
+        ok: false,
+        error: {
+          code: 'invalid_request',
+          message: 'Expected an empty unsubscribe object.',
+        },
+      };
+    }
     void client.leave('rankings:hour');
     void client.leave('rankings:business_day');
     return { ok: true };
   }
+
   subscribedWindows(): RankingWindow[] {
     const windows: RankingWindow[] = [];
     for (const window of ['hour', 'business_day'] as const) {

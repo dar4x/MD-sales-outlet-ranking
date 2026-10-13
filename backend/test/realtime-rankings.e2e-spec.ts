@@ -297,4 +297,33 @@ await describe('Realtime rankings subscriptions', async () => {
       socket.close();
     }
   });
+  await it('rejects malformed unsubscribe payloads without removing the subscription', async () => {
+    const socket = await connect(url);
+    try {
+      await acknowledge(socket, 'rankings.subscribe', { window: 'hour' });
+      for (const payload of [null, [], { extra: true }]) {
+        assert.deepEqual(
+          await acknowledge(socket, 'rankings.unsubscribe', payload),
+          {
+            ok: false,
+            error: {
+              code: 'invalid_request',
+              message: 'Expected an empty unsubscribe object.',
+            },
+          },
+        );
+        assert.ok(
+          app
+            .get(RankingsGateway)
+            .server.sockets.sockets.get(socket.id!)!
+            .rooms.has('rankings:hour'),
+        );
+      }
+      assert.deepEqual(await acknowledge(socket, 'rankings.unsubscribe', {}), {
+        ok: true,
+      });
+    } finally {
+      socket.close();
+    }
+  });
 });
