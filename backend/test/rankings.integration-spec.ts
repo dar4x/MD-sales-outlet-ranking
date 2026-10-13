@@ -108,4 +108,57 @@ await describe('PostgresRankingQuery', async () => {
       expected.map((_, index) => index + 1),
     );
   });
+  await it('uses half-open hour boundaries', async () => {
+    await sale(BISHKEK_OUTLET_ID, '2026-10-13T05:00:00Z', 10n);
+    await sale(BISHKEK_OUTLET_ID, asOf, 999n);
+    await sale(BISHKEK_OUTLET_ID, '2026-10-13T04:59:59.999Z', 888n);
+    const snapshot = await query.get('hour', asOf);
+    const row = snapshot.rows.find(
+      (row) => row.outlet_id === BISHKEK_OUTLET_ID,
+    )!;
+    assert.equal(row.net_revenue_minor, '10');
+    assert.equal(row.receipt_count, 1);
+  });
+  await it('uses each outlet local midnight and excludes late previous-day sales', async () => {
+    for (const [id, midnight] of [
+      [BISHKEK_OUTLET_ID, '2026-10-12T18:00:00.000Z'],
+      [ALMATY_OUTLET_ID, '2026-10-12T19:00:00.000Z'],
+    ]) {
+      const start = Date.parse(midnight!);
+      await sale(id!, new Date(start - 1).toISOString(), 999n);
+      await sale(id!, new Date(start).toISOString(), 10n);
+      await sale(id!, new Date(start + 1).toISOString(), 20n);
+      await sale(id!, asOf, 888n);
+    }
+    const snapshot = await query.get('business_day', asOf);
+    for (const [id, midnight] of [
+      [BISHKEK_OUTLET_ID, '2026-10-12T18:00:00.000Z'],
+      [ALMATY_OUTLET_ID, '2026-10-12T19:00:00.000Z'],
+    ]) {
+      const row = snapshot.rows.find((row) => row.outlet_id === id)!;
+      assert.equal(row.starts_at, midnight);
+      assert.equal(row.net_revenue_minor, '30');
+      assert.equal(row.receipt_count, 2);
+      assert.equal(row.local_date, '2026-10-13');
+      assert.equal(row.ends_at, asOf);
+      assert.equal(row.previous_revenue_minor, null);
+      assert.equal(row.dynamics_bps, null);
+    }
+  });
+  await it('keeps local midnight across spring and autumn DST changes', async () => {
+    const berlin = '00000000-0000-4000-8000-000000000005';
+    for (const [end, start] of [
+      ['2026-03-29T21:59:59.000Z', '2026-03-28T23:00:00.000Z'],
+      ['2026-10-25T22:59:59.000Z', '2026-10-24T22:00:00.000Z'],
+    ]) {
+      await sale(berlin, new Date(Date.parse(start!) - 1).toISOString(), 999n);
+      await sale(berlin, start!, 10n);
+      await sale(berlin, new Date(Date.parse(end!) - 1).toISOString(), 20n);
+      const snapshot = await query.get('business_day', end);
+      const row = snapshot.rows.find((row) => row.outlet_id === berlin)!;
+      assert.equal(row.starts_at, start);
+      assert.equal(row.net_revenue_minor, '30');
+      assert.equal(row.receipt_count, 2);
+    }
+  });
 });

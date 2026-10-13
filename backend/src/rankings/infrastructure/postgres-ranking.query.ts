@@ -29,7 +29,12 @@ export class PostgresRankingQuery implements RankingQuery {
       WITH instant AS MATERIALIZED (
         SELECT $1::text AS selected_window, COALESCE($2::timestamptz, clock_timestamp()) AS as_of
       ), bounds AS (
-        SELECT o.*, i.as_of, i.as_of - interval '1 hour' AS starts_at
+        SELECT o.*, i.as_of,
+          CASE WHEN $1 = 'hour' THEN i.as_of - interval '1 hour'
+          -- Convert to local civil time before midnight, then back to an instant.
+          -- This respects IANA DST rules rather than assuming a 24-hour day.
+          ELSE date_trunc('day', i.as_of AT TIME ZONE o.time_zone)
+            AT TIME ZONE o.time_zone END AS starts_at
         FROM outlets o CROSS JOIN instant i
       ), sale_totals AS (
         SELECT b.outlet_id, COALESCE(sum(s.gross_amount_minor), 0) AS revenue,
