@@ -139,7 +139,7 @@ await describe('IngestEvent', async () => {
     const lineRows: {
       sale_line_id: string;
       product_id: string;
-      quantity: number;
+      quantity: string;
       unit_price_minor: string;
       line_amount_minor: string;
     }[] = await dataSource.query(
@@ -152,14 +152,14 @@ await describe('IngestEvent', async () => {
       {
         sale_line_id: sale.lines[0]!.sale_line_id,
         product_id: BREAD_PRODUCT_ID,
-        quantity: 2,
+        quantity: '2',
         unit_price_minor: '5000',
         line_amount_minor: '10000',
       },
       {
         sale_line_id: sale.lines[1]!.sale_line_id,
         product_id: MILK_PRODUCT_ID,
-        quantity: 1,
+        quantity: '1',
         unit_price_minor: '2500',
         line_amount_minor: '2500',
       },
@@ -403,5 +403,27 @@ await describe('IngestEvent', async () => {
       receipts: 1,
       lines: 2,
     });
+  });
+
+  await it('stores the largest safe integer quantity exactly', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const sale = buildSale(randomUUID());
+    sale.lines[1] = {
+      ...sale.lines[1]!,
+      quantity: Number.MAX_SAFE_INTEGER,
+      unit_price_minor: 0n,
+      line_amount_minor: 0n,
+    };
+
+    await ingestEvent.execute(sale);
+
+    const rows: { quantity: string }[] = await dataSource.query(
+      'SELECT quantity FROM sale_lines WHERE receipt_id = $1 AND sale_line_id = $2',
+      [sale.receipt_id, sale.lines[1].sale_line_id],
+    );
+    assert.deepEqual(rows, [{ quantity: '9007199254740991' }]);
   });
 });

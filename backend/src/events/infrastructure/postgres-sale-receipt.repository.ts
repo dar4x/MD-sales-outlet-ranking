@@ -44,7 +44,8 @@ export class PostgresSaleReceiptRepository implements SaleReceiptRepository {
           receipt.receipt_id,
           line.sale_line_id,
           line.product_id,
-          line.quantity,
+          // Sent as text like money: exact for any safe integer quantity.
+          line.quantity.toString(),
           line.unit_price_minor.toString(),
           line.line_amount_minor.toString(),
         ],
