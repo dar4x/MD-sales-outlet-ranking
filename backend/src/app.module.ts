@@ -6,6 +6,8 @@ import { ApplicationConfigModule } from './config/application-config.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { EventsModule } from './events/events.module.js';
 import { HealthModule } from './health/health.module.js';
+import { OutletsModule } from './outlets/outlets.module.js';
+import { ProductsModule } from './products/products.module.js';
 import { RankingsModule } from './rankings/rankings.module.js';
 import { RealtimeModule } from './realtime/realtime.module.js';
 
@@ -17,6 +19,8 @@ import { RealtimeModule } from './realtime/realtime.module.js';
     HealthModule,
     RealtimeModule,
     RankingsModule,
+    ProductsModule,
+    OutletsModule,
   ],
 })
 export class AppModule {}
