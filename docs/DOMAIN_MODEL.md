@@ -85,15 +85,15 @@ Query models contain wire-safe strings, not aggregates or TypeORM entities.
 
 ## Use cases and ports (planned, no implementations)
 
-| Feature       | Use cases                                                           | Ports                                                                                                                         |
-| ------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| events        | IngestEvent                                                         | EventLedgerRepository, SaleReceiptRepository, ProductLookup, OutletActivityRepository, AlertEpisodeRepository, RankingRefresh |
-| rankings      | GetRankings, PublishRankings                                        | RankingQuery, RankingPublisher, RankingRefresh                                                                                |
-| outlets       | ListOutlets, GetOutletCard, GetOutletSettings, UpdateOutletSettings | OutletRepository, OutletQuery, OutletCardQuery, RankingRefresh                                                                |
-| products      | ListProducts                                                        | ProductCatalogueQuery, ProductLookup                                                                                          |
-| alerts        | EvaluateAlerts, ListAlerts                                          | AlertEpisodeRepository, MiddayAssessmentRepository, AlertEvaluationQuery, AlertQuery, OutboxRepository, RankingRefresh        |
-| notifications | DispatchOutbox                                                      | OutboxRepository, Mailer                                                                                                      |
-| shared        | none                                                                | Clock, TransactionRunner (transaction-scoped repository bundle)                                                               |
+| Feature       | Use cases                                                           | Ports                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| events        | IngestEvent                                                         | EventLedgerRepository, SaleReceiptRepository, ProductLookup, OutletActivityRepository, AlertEpisodeRepository, RankingRefreshRequester |
+| rankings      | GetRankings, PublishRankings                                        | RankingQuery, RankingPublisher, RankingRefreshRequester                                                                                |
+| outlets       | ListOutlets, GetOutletCard, GetOutletSettings, UpdateOutletSettings | OutletRepository, OutletQuery, OutletCardQuery, RankingRefreshRequester                                                                |
+| products      | ListProducts                                                        | ProductCatalogueQuery, ProductLookup                                                                                                   |
+| alerts        | EvaluateAlerts, ListAlerts                                          | AlertEpisodeRepository, MiddayAssessmentRepository, AlertEvaluationQuery, AlertQuery, OutboxRepository, RankingRefreshRequester        |
+| notifications | DispatchOutbox                                                      | OutboxRepository, Mailer                                                                                                               |
+| shared        | none                                                                | Clock, TransactionRunner (transaction-scoped repository bundle)                                                                        |
 
 Ports are intentionally narrow interfaces. Transaction callback receives bound
 ports, never a TypeORM QueryRunner. Query responses stay read models. Application

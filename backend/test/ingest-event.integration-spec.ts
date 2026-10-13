@@ -155,6 +155,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
 
@@ -177,6 +179,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
 
@@ -235,6 +239,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new FailAtEndRunner(new PostgresTransactionRunner(dataSource)),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const outletId = await createTestOutlet();
     const sale: SaleInput = { ...buildSale(randomUUID()), outlet_id: outletId };
@@ -257,6 +263,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       clock,
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
     await ingestEvent.execute(sale);
@@ -278,6 +286,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
     await ingestEvent.execute(sale);
@@ -296,6 +306,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
     await ingestEvent.execute(sale);
@@ -309,6 +321,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
     sale.lines[0] = { ...sale.lines[0]!, line_amount_minor: 1n };
@@ -325,6 +339,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
 
@@ -356,6 +372,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const eventId = randomUUID();
 
@@ -395,6 +413,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const firstSale = buildSale(randomUUID());
     await ingestEvent.execute(firstSale);
@@ -426,6 +446,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const receiptId = randomUUID();
 
@@ -476,6 +498,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale: SaleInput = {
       ...buildSale(randomUUID()),
@@ -497,6 +521,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
     const unknownProductId = randomUUID();
@@ -522,6 +548,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
     const firstUnknownId = randomUUID();
@@ -542,6 +570,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
 
     // Same outlet for all 10, so they also queue on the outlet lock.
@@ -589,6 +619,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
     sale.lines[1] = {
@@ -611,6 +643,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
     await ingestEvent.execute(sale);
@@ -628,6 +662,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
     await ingestEvent.execute(sale);
@@ -653,6 +689,8 @@ await describe('IngestEvent', async () => {
       const ingestEvent = new IngestEvent(
         new PostgresTransactionRunner(dataSource),
         new FakeClock(),
+
+        { request: () => {} },
       );
       const sale = buildSale(randomUUID());
       const changedSale: SaleInput = { ...sale, outlet_id: randomUUID() };
@@ -697,6 +735,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const outletId = await createTestOutlet();
     const sale: SaleInput = { ...buildSale(randomUUID()), outlet_id: outletId };
@@ -711,6 +751,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       clock,
+
+      { request: () => {} },
     );
     const outletId = await createTestOutlet();
     const sale: SaleInput = { ...buildSale(randomUUID()), outlet_id: outletId };
@@ -759,10 +801,14 @@ await describe('IngestEvent', async () => {
     await new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       lateClock,
+
+      { request: () => {} },
     ).execute({ ...buildSale(randomUUID()), outlet_id: outletId });
     await new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     ).execute({ ...buildSale(randomUUID()), outlet_id: outletId });
 
     assert.equal(await readLastAcceptedAt(outletId), LATER_ACCEPTED_AT);
@@ -779,6 +825,8 @@ await describe('IngestEvent', async () => {
       const ingestEvent = new IngestEvent(
         new PostgresTransactionRunner(dataSource),
         clock,
+
+        { request: () => {} },
       );
       calls.push(
         ingestEvent.execute({
@@ -810,6 +858,8 @@ await describe('IngestEvent', async () => {
       const ingestEvent = new IngestEvent(
         new PostgresTransactionRunner(dataSource),
         clock,
+
+        { request: () => {} },
       );
       calls.push(ingestEvent.execute(sale));
     }
@@ -829,6 +879,8 @@ await describe('IngestEvent', async () => {
     const ingestEvent = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const sale = buildSale(randomUUID());
     // One line at the bigint limit and one free line: the total is exactly
@@ -862,6 +914,8 @@ await describe('IngestEvent', async () => {
     const ingest = new IngestEvent(
       new PostgresTransactionRunner(dataSource),
       new FakeClock(),
+
+      { request: () => {} },
     );
     const eventId = randomUUID();
     const first = buildSale(eventId);
@@ -889,5 +943,29 @@ await describe('IngestEvent', async () => {
         lines: won ? 2 : 0,
       });
     }
+  });
+  await it('requests rankings only after the receipt transaction is committed', async () => {
+    const sale = buildSale(randomUUID());
+    let observed: Promise<{ receipt_id: string }[]> | undefined;
+    let requests = 0;
+    const ingest = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+      {
+        request: () => {
+          requests += 1;
+          // A different pool connection cannot see the uncommitted transaction.
+          observed = dataSource.query(
+            'SELECT receipt_id FROM sale_receipts WHERE receipt_id = $1',
+            [sale.receipt_id],
+          );
+        },
+      },
+    );
+    await ingest.execute(sale);
+    assert.deepEqual(await observed, [{ receipt_id: sale.receipt_id }]);
+    assert.equal(requests, 1);
+    await ingest.execute(sale);
+    assert.equal(requests, 1);
   });
 });

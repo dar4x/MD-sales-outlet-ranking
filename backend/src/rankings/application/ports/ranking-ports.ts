@@ -7,9 +7,10 @@ export interface RankingQuery {
   get(window: RankingWindow, asOf?: UtcTimestamp): Promise<RankingSnapshot>;
 }
 export interface RankingPublisher {
+  subscribedWindows(): RankingWindow[];
   publish(snapshot: RankingSnapshot): Promise<void>;
 }
-// Request only after commit; the future adapter coalesces batches using env cadence.
-export interface RankingRefresh {
+// Request only after commit; the adapter coalesces batches using env cadence.
+export interface RankingRefreshRequester {
   request(): void;
 }

@@ -1,4 +1,5 @@
 /* Internal deps */
+import type { RankingRefreshRequester } from '../../rankings/application/ports/ranking-ports.js';
 import type { Clock } from '../../shared/application/ports/clock.js';
 import type { TransactionRunner } from '../../shared/application/ports/transaction-runner.js';
 import { createSaleReceipt } from '../domain/create-sale-receipt.js';
@@ -22,6 +23,7 @@ export class IngestEvent {
   constructor(
     private readonly transactions: TransactionRunner,
     private readonly clock: Clock,
+    private readonly refreshRequester: RankingRefreshRequester,
   ) {}
 
   async execute(sale: SaleInput): Promise<IngestEventResult> {
@@ -41,59 +43,66 @@ export class IngestEvent {
       duplicate: false,
     };
 
-    return this.transactions.run(async (ports) => {
-      // The outlet row is locked first, so every event of one outlet takes
-      // locks in the same order: outlet, then ledger, then receipt.
-      const outletExists = await ports.activity.lock(sale.outlet_id);
-      if (!outletExists) {
-        // The ledger has a foreign key to outlets, so no insert is possible.
-        // Reading it only picks the error code: the contract says a changed
-        // payload for a known event_id is 409. Nothing is written after
-        // this read, so it cannot race another insert.
-        const storedForUnknownOutlet = await ports.events.find(sale.event_id);
-        if (storedForUnknownOutlet !== null) {
-          throw new EventConflictError(sale.event_id);
+    const result = await this.transactions.run<IngestEventResult>(
+      async (ports) => {
+        // The outlet row is locked first, so every event of one outlet takes
+        // locks in the same order: outlet, then ledger, then receipt.
+        const outletExists = await ports.activity.lock(sale.outlet_id);
+        if (!outletExists) {
+          // The ledger has a foreign key to outlets, so no insert is possible.
+          // Reading it only picks the error code: the contract says a changed
+          // payload for a known event_id is 409. Nothing is written after
+          // this read, so it cannot race another insert.
+          const storedForUnknownOutlet = await ports.events.find(sale.event_id);
+          if (storedForUnknownOutlet !== null) {
+            throw new EventConflictError(sale.event_id);
+          }
+          throw new EventValidationError(
+            'unknown_outlet',
+            `Outlet ${sale.outlet_id} does not exist.`,
+          );
         }
-        throw new EventValidationError(
-          'unknown_outlet',
-          `Outlet ${sale.outlet_id} does not exist.`,
+
+        // Never SELECT-then-INSERT: the event_id primary key decides which of
+        // several concurrent requests is the new one.
+        const insertResult = await ports.events.insert({
+          event_id: sale.event_id,
+          canonical_payload: canonicalPayload,
+          payload_hash: payloadHash,
+          input: sale,
+          acceptance,
+        });
+        if (insertResult === 'event_conflict') {
+          return this.handleRetry(sale.event_id, payloadHash, ports.events);
+        }
+
+        // Products are checked only for a new event, after the identity check,
+        // so a changed payload for a known event_id stays 409. Throwing here
+        // rolls back the ledger row inserted above.
+        await this.checkProducts(sale, ports.products);
+
+        // Same transaction as the ledger row: if the receipt or any line
+        // fails, the accepted event is rolled back too.
+        const receiptResult = await ports.receipts.insert(receipt);
+        if (receiptResult === 'receipt_conflict') {
+          throw new ReceiptConflictError(sale.receipt_id);
+        }
+
+        // Only a newly accepted event reaches this line: retries, conflicts
+        // and validation failures returned or threw above, so they never
+        // refresh outlet activity.
+        await ports.activity.recordAccepted(
+          sale.outlet_id,
+          acceptance.accepted_at,
         );
-      }
-
-      // Never SELECT-then-INSERT: the event_id primary key decides which of
-      // several concurrent requests is the new one.
-      const insertResult = await ports.events.insert({
-        event_id: sale.event_id,
-        canonical_payload: canonicalPayload,
-        payload_hash: payloadHash,
-        input: sale,
-        acceptance,
-      });
-      if (insertResult === 'event_conflict') {
-        return this.handleRetry(sale.event_id, payloadHash, ports.events);
-      }
-
-      // Products are checked only for a new event, after the identity check,
-      // so a changed payload for a known event_id stays 409. Throwing here
-      // rolls back the ledger row inserted above.
-      await this.checkProducts(sale, ports.products);
-
-      // Same transaction as the ledger row: if the receipt or any line
-      // fails, the accepted event is rolled back too.
-      const receiptResult = await ports.receipts.insert(receipt);
-      if (receiptResult === 'receipt_conflict') {
-        throw new ReceiptConflictError(sale.receipt_id);
-      }
-
-      // Only a newly accepted event reaches this line: retries, conflicts
-      // and validation failures returned or threw above, so they never
-      // refresh outlet activity.
-      await ports.activity.recordAccepted(
-        sale.outlet_id,
-        acceptance.accepted_at,
-      );
-      return { outcome: 'created', acceptance };
-    });
+        return { outcome: 'created', acceptance };
+      },
+    );
+    // TransactionRunner resolves only after commit; retries never request a read.
+    if (result.outcome === 'created') {
+      this.refreshRequester.request();
+    }
+    return result;
   }
 
   private async handleRetry(

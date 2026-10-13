@@ -1,6 +1,6 @@
 # Planned API contract
 
-Implemented: sale ingestion, HTTP rankings, ping/health and Socket.IO ping/pong. Returns and
+Implemented: sale ingestion, HTTP and Socket.IO rankings, ping/health and Socket.IO ping/pong. Returns and
 all other business routes/events below remain planned. Developer-approved decisions,
 implemented with AI assistance; independent frontend contracts must not import backend.
 
@@ -61,12 +61,31 @@ PATCH uses last write wins for supplied fields; no expected_version or 409.
 | server rankings.snapshot    | RankingSnapshot                         | PublishRankings; only business push channel, including stale/behind-plan flags                                                          |
 | client ping / server pong   | no ping payload / `{ message: "pong" }` | existing flat gateway                                                                                                                   |
 
-No alerts.* events. Alert list is HTTP only. Window belongs to each client
-(localStorage), not a stored chain-wide setting. Reconnect resubscribes and obtains
-a fresh snapshot. Frontend computes rank movement from successive snapshots.
-Refresh requests after committed events/settings/alert changes coalesce for about
-250 ms (configured); broadcast once per subscribed window per batch, not per event.
-Timer refreshes handle rolling expiration and local date changes without ingestion.
+No alerts.* events. Alert list is HTTP only. Each client has at most one ranking
+window: a valid subscribe leaves its old ranking room and joins the new one.
+Invalid payloads acknowledge an error without changing rooms; unknown fields
+are rejected. Success acknowledges { ok: true, window }, then GetRankings sends
+the initial snapshot only to that client. Unsubscribe leaves both ranking rooms
+and acknowledges { ok: true }.
+Subscriptions live only in Socket.IO rooms and are lost on disconnect/reconnect;
+the client must subscribe again to obtain a fresh initial snapshot. Window belongs
+to each client (localStorage), not a stored chain-wide setting. Frontend computes
+rank movement from successive snapshots.
+
+Newly created sales request refresh only after commit; duplicate retries and
+rejected events never request refresh. Future settings/alert changes will use the
+same request port. REALTIME_COALESCE_MS defaults to 250: each event request resets
+the trailing delay, so a burst's final read includes its last committed event.
+If a request arrives during a read, exactly one additional refresh follows that
+read (many requests collapse together); refreshes never overlap.
+PublishRankings reads only windows that currently have subscribers, once per
+window per refresh, and broadcasts that one snapshot to the whole room.
+
+REALTIME_REFRESH_INTERVAL_MS defaults to 5000. Timer ticks request refresh for
+rolling expiration and local date changes without ingestion; a tick leaves an
+already queued refresh alone so short intervals cannot postpone it forever.
+Both delays are positive integer milliseconds, capped at 2147483647. Shutdown
+clears both timers. Snapshot failures are logged and later refreshes remain active.
 Snapshot UUID/as_of identify each result; no persistent in-memory ranking state.
 
 ## Read shapes
