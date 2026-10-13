@@ -9,6 +9,7 @@ import 'reflect-metadata';
 /* Internal deps */
 import { AppModule } from '../src/app.module.js';
 import { configureApplication } from '../src/configure-application.js';
+import { IngestEvent } from '../src/events/application/ingest-event.js';
 import {
   BISHKEK_OUTLET_ID,
   BREAD_PRODUCT_ID,
@@ -253,5 +254,56 @@ await describe('POST /api/events', async () => {
     });
     assert.equal(result.status, 422);
     assert.equal(result.json.code, 'duplicate_line_id');
+  });
+  await it('sanitizes database connection failures as 503', async () => {
+    const ingest = app.get(IngestEvent);
+    const originalExecute = ingest.execute.bind(ingest);
+    const failures = [
+      Object.assign(new Error('private host and credentials'), {
+        code: 'ECONNREFUSED',
+      }),
+      Object.assign(new Error('private SQL'), {
+        driverError: { code: '08006' },
+      }),
+      Object.assign(new Error('private server'), { code: '57P01' }),
+      new Error('Connection terminated unexpectedly'),
+    ];
+    try {
+      for (const failure of failures) {
+        ingest.execute = () => Promise.reject(failure);
+        const response = await postEvent(buildSaleBody(randomUUID()));
+        assert.equal(response.status, 503);
+        assert.deepEqual(response.json, {
+          code: 'database_unavailable',
+          message: 'Database connection is unavailable.',
+        });
+      }
+    } finally {
+      ingest.execute = originalExecute;
+    }
+  });
+
+  await it('does not mislabel other SQL or application errors as 503', async () => {
+    const ingest = app.get(IngestEvent);
+    const originalExecute = ingest.execute.bind(ingest);
+    try {
+      for (const failure of [
+        Object.assign(new Error('private SQL'), {
+          driverError: { code: '23505' },
+        }),
+        Object.assign(new Error('missing table'), { code: '42P01' }),
+        new Error('private application details'),
+      ]) {
+        ingest.execute = () => Promise.reject(failure);
+        const response = await postEvent(buildSaleBody(randomUUID()));
+        assert.equal(response.status, 500);
+        assert.deepEqual(response.json, {
+          statusCode: 500,
+          message: 'Internal server error',
+        });
+      }
+    } finally {
+      ingest.execute = originalExecute;
+    }
   });
 });
