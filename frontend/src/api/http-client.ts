@@ -1,12 +1,19 @@
 export async function getJson(
   path: string,
   signal: AbortSignal,
+  options: Pick<RequestInit, 'method' | 'body'> = {},
 ): Promise<unknown> {
   const baseUrl = import.meta.env.VITE_API_URL.replace(/\/+$/, '');
   const url = new URL(path, `${baseUrl}/`);
   const response = await fetch(url, {
+    ...options,
     signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
-    headers: { Accept: 'application/json' },
+    headers: {
+      Accept: 'application/json',
+      ...(options.body === undefined
+        ? {}
+        : { 'Content-Type': 'application/json' }),
+    },
   });
   if (!response.ok) {
     let message = `Request failed (${response.status}).`;
