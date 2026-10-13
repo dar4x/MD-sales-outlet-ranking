@@ -10,6 +10,7 @@ import {
 import type { RankingRefreshRequester } from '../rankings/application/ports/ranking-ports.js';
 import { PostgresTransactionRunner } from '../shared/infrastructure/postgres-transaction-runner.js';
 import { SystemClock } from '../shared/infrastructure/system-clock.js';
+import { EvaluateMiddayAlerts } from './application/evaluate-midday-alerts.js';
 import { EvaluateStaleAlerts } from './application/evaluate-stale-alerts.js';
 import { ListAlerts } from './application/list-alerts.js';
 import { PostgresAlertEvaluationQuery } from './infrastructure/postgres-alert-evaluation.query.js';
@@ -21,6 +22,17 @@ const logger = new Logger('AlertEvaluation');
   imports: [DatabaseModule, RankingsModule],
   controllers: [AlertsController],
   providers: [
+    {
+      provide: EvaluateMiddayAlerts,
+      inject: [DataSource, RANKING_REFRESH_REQUESTER],
+      useFactory: (db: DataSource, refresh: RankingRefreshRequester) =>
+        new EvaluateMiddayAlerts(
+          new PostgresTransactionRunner(db),
+          new PostgresAlertEvaluationQuery(db),
+          new SystemClock(),
+          refresh,
+        ),
+    },
     {
       provide: EvaluateStaleAlerts,
       inject: [DataSource, ConfigService, RANKING_REFRESH_REQUESTER],
@@ -45,13 +57,17 @@ const logger = new Logger('AlertEvaluation');
     },
     {
       provide: AlertScheduler,
-      inject: [EvaluateStaleAlerts, ConfigService],
+      inject: [EvaluateStaleAlerts, EvaluateMiddayAlerts, ConfigService],
       useFactory: (
         evaluate: EvaluateStaleAlerts,
+        midday: EvaluateMiddayAlerts,
         config: ConfigService<EnvironmentVariables, true>,
       ) =>
         new AlertScheduler(
-          () => evaluate.execute(),
+          async () => {
+            await evaluate.execute();
+            await midday.execute();
+          },
           config.get('ALERT_EVALUATION_INTERVAL_MS', { infer: true }),
           (error) => logger.error('Alert evaluation failed.', error),
         ),

@@ -9,6 +9,7 @@ import { PostgresOutletRepository } from '../../outlets/infrastructure/postgres-
 import { PostgresAlertRepository } from '../../alerts/infrastructure/postgres-alert.repository.js';
 import { PostgresAlertEvaluationQuery } from '../../alerts/infrastructure/postgres-alert-evaluation.query.js';
 import { PostgresOutboxRepository } from '../../notifications/infrastructure/postgres-outbox.repository.js';
+import { PostgresMiddayAssessmentRepository } from '../../alerts/infrastructure/postgres-midday-assessment.repository.js';
 import { PostgresProductLookup } from '../../products/infrastructure/postgres-product-lookup.js';
 import type {
   TransactionPorts,
@@ -29,6 +30,7 @@ export class PostgresTransactionRunner implements TransactionRunner {
         products: new PostgresProductLookup(manager),
         outlets: new PostgresOutletRepository(manager),
         alerts: new PostgresAlertRepository(manager),
+        assessments: new PostgresMiddayAssessmentRepository(manager),
         alertEvaluation: new PostgresAlertEvaluationQuery(manager),
         outbox: new PostgresOutboxRepository(manager),
       };

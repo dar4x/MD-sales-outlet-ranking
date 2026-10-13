@@ -17,5 +17,12 @@ export interface AlertEvaluation {
   responsible_person: ResponsiblePerson;
 }
 export interface AlertEvaluationQuery {
-  list(asOf: UtcTimestamp, outletId?: Identifier): Promise<AlertEvaluation[]>;
+  missedNoons(
+    asOf: UtcTimestamp,
+  ): Promise<{ outlet_id: Identifier; local_date: LocalDate }[]>;
+  list(
+    asOf: UtcTimestamp,
+    outletId?: Identifier,
+    localDate?: LocalDate,
+  ): Promise<AlertEvaluation[]>;
 }
