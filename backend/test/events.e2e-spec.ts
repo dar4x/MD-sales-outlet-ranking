@@ -206,4 +206,10 @@ await describe('POST /api/events', async () => {
     assert.equal(createdCount, 1);
     assert.equal(retryCount, 9);
   });
+  await it('returns 422 for an array used as a sale line', async () => {
+    const body = buildSaleBody(randomUUID());
+    const result = await postEvent({ ...body, lines: [body.lines] });
+    assert.equal(result.status, 422);
+    assert.equal(result.json.code, 'invalid_request');
+  });
 });

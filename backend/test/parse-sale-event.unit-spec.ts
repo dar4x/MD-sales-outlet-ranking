@@ -212,4 +212,9 @@ await describe('ParseSaleEventPipe', async () => {
       'lines',
     );
   });
+  await it('rejects non-object line elements instead of throwing TypeError', () => {
+    for (const line of [null, 1, 'line', [], [buildBodyWithLine({})]]) {
+      assertRejected({ ...buildBody(), lines: [line] }, 'invalid_request');
+    }
+  });
 });

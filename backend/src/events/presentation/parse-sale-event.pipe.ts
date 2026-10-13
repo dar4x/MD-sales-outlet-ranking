@@ -27,6 +27,17 @@ export class ParseSaleEventPipe implements PipeTransform<unknown, SaleInput> {
       );
     }
 
+    if ('lines' in body && Array.isArray(body.lines)) {
+      for (const line of body.lines) {
+        if (typeof line !== 'object' || line === null || Array.isArray(line)) {
+          throw new EventValidationError(
+            'invalid_request',
+            'Each sale line must be a JSON object.',
+          );
+        }
+      }
+    }
+
     const dto = plainToInstance(SaleEventDto, body);
     // forbidNonWhitelisted: the contract says unknown fields are rejected.
     const errors = validateSync(dto, {
