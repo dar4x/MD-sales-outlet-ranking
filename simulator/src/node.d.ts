@@ -58,3 +58,33 @@ declare module "node:http" {
     handler: (request: IncomingMessage, response: ServerResponse) => void,
   ): Server;
 }
+declare module "node:child_process" {
+  export interface ChildProcess {
+    stdout: {
+      setEncoding(encoding: string): void;
+      on(event: "data", listener: (chunk: string) => void): void;
+    };
+    stderr: ChildProcess["stdout"];
+    exitCode: number | null;
+    signalCode: string | null;
+    kill(signal: string): boolean;
+    on(event: "close", listener: (code: number | null) => void): void;
+    on(event: "error", listener: (error: Error) => void): void;
+  }
+  export function spawn(
+    command: string,
+    args: string[],
+    options: {
+      stdio: ["ignore", "pipe", "pipe"];
+    },
+  ): ChildProcess;
+}
+declare module "node:readline" {
+  import type { ChildProcess } from "node:child_process";
+  export function createInterface(options: { input: ChildProcess["stdout"] }): {
+    on(event: "line", listener: (line: string) => void): void;
+  };
+}
+declare module "node:url" {
+  export function fileURLToPath(url: URL): string;
+}
