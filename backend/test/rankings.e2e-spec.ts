@@ -27,7 +27,9 @@ await describe('GET /api/rankings', async () => {
   after(() => app.close());
   beforeEach(async () => {
     assertTestDatabase(String(database.options.database));
-    await database.query('TRUNCATE sale_lines, sale_receipts, accepted_events');
+    await database.query(
+      'TRUNCATE return_lines, return_events, sale_lines, sale_receipts, accepted_events',
+    );
   });
   await it('ranks sales ingested through HTTP using a fresh SQL clock', async () => {
     const beforeRequest = Date.now();

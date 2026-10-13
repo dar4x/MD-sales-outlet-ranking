@@ -38,7 +38,9 @@ await describe('Realtime rankings subscriptions', async () => {
   beforeEach(async () => {
     const database = app.get(DataSource);
     assertTestDatabase(String(database.options.database));
-    await database.query('TRUNCATE sale_lines, sale_receipts, accepted_events');
+    await database.query(
+      'TRUNCATE return_lines, return_events, sale_lines, sale_receipts, accepted_events',
+    );
   });
   await it('acknowledges subscribe, sends initial snapshot only to that client, switches and unsubscribes', async () => {
     const first = await connect(url);

@@ -93,6 +93,7 @@ await describe('ParseSaleEventPipe', async () => {
 
     const sale = new ParseSaleEventPipe().transform(body);
 
+    assert.ok(sale.kind === 'sale');
     assert.equal(sale.lines[0]?.unit_price_minor, 9007199254740993n);
   });
 
@@ -108,8 +109,8 @@ await describe('ParseSaleEventPipe', async () => {
     assertRejected('sale', 'invalid_request');
   });
 
-  await it('rejects return events as unsupported for now', () => {
-    assertRejected({ ...buildBody(), kind: 'return' }, 'unsupported_kind');
+  await it('rejects a sale-shaped body mislabeled as a return', () => {
+    assertRejected({ ...buildBody(), kind: 'return' }, 'invalid_request');
   });
 
   await it('rejects an unknown kind', () => {
@@ -235,6 +236,7 @@ await describe('ParseSaleEventPipe', async () => {
       outlet_id: id,
     });
     assert.equal(sale.event_id, id.toLowerCase());
+    assert.ok(sale.kind === 'sale');
     assert.equal(sale.receipt_id, id.toLowerCase());
     assert.equal(sale.outlet_id, id.toLowerCase());
     assert.equal(sale.lines[0]?.sale_line_id, id.toLowerCase());

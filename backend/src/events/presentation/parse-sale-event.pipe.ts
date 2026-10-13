@@ -6,24 +6,17 @@ import { validateSync } from 'class-validator';
 
 /* Internal deps */
 import { EventValidationError } from '../domain/event-errors.js';
-import type { SaleInput, SaleLine } from '../domain/event.js';
-import { SaleEventDto } from './sale-event.dto.js';
+import type { EventInput, SaleLine } from '../domain/event.js';
+import { SaleEventDto, ReturnEventDto } from './sale-event.dto.js';
 
 // Turns the raw POST /api/events body into a SaleInput. Every rejection is
 // an EventValidationError, so the controller can answer 422 in one place.
-export class ParseSaleEventPipe implements PipeTransform<unknown, SaleInput> {
-  transform(body: unknown): SaleInput {
+export class ParseSaleEventPipe implements PipeTransform<unknown, EventInput> {
+  transform(body: unknown): EventInput {
     if (typeof body !== 'object' || body === null || Array.isArray(body)) {
       throw new EventValidationError(
         'invalid_request',
         'The request body must be a JSON object.',
-      );
-    }
-    // Returns are part of the contract but arrive in a later branch.
-    if ('kind' in body && body.kind === 'return') {
-      throw new EventValidationError(
-        'unsupported_kind',
-        'Return events are not supported yet.',
       );
     }
 
@@ -38,6 +31,36 @@ export class ParseSaleEventPipe implements PipeTransform<unknown, SaleInput> {
       }
     }
 
+    if ('kind' in body && body.kind === 'return') {
+      const dto = plainToInstance(ReturnEventDto, body);
+      const errors = validateSync(dto, {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      });
+      if (errors.length > 0)
+        throw new EventValidationError(
+          'invalid_request',
+          'Invalid return event.',
+          describeErrors(errors, ''),
+        );
+      if (/\.\d{4,}/.test(dto.occurred_at))
+        throw new EventValidationError(
+          'timestamp_precision',
+          'occurred_at must have at most three fractional digits.',
+        );
+      return {
+        kind: 'return',
+        event_id: dto.event_id.toLowerCase(),
+        outlet_id: dto.outlet_id.toLowerCase(),
+        sale_receipt_id: dto.sale_receipt_id.toLowerCase(),
+        occurred_at: dto.occurred_at,
+        lines: dto.lines.map((line) => ({
+          return_line_id: line.return_line_id.toLowerCase(),
+          sale_line_id: line.sale_line_id.toLowerCase(),
+          quantity: line.quantity,
+        })),
+      };
+    }
     const dto = plainToInstance(SaleEventDto, body);
     // forbidNonWhitelisted: the contract says unknown fields are rejected.
     const errors = validateSync(dto, {

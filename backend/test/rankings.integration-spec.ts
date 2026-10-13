@@ -51,7 +51,7 @@ await describe('PostgresRankingQuery', async () => {
   beforeEach(async () => {
     assertTestDatabase(String(dataSource.options.database));
     await dataSource.query(
-      'TRUNCATE sale_lines, sale_receipts, accepted_events',
+      'TRUNCATE return_lines, return_events, sale_lines, sale_receipts, accepted_events',
     );
   });
   await it('counts hour sales and returns every persisted outlet', async () => {

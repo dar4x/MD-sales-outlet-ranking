@@ -20,6 +20,12 @@ interface StoredEventRow {
 export class PostgresEventLedgerRepository implements EventLedgerRepository {
   constructor(private readonly manager: EntityManager) {}
 
+  async updateAmount(eventId: string, amount: bigint): Promise<void> {
+    await this.manager.query(
+      'UPDATE accepted_events SET amount_minor = $2 WHERE event_id = $1',
+      [eventId, amount.toString()],
+    );
+  }
   async find(eventId: string): Promise<StoredEvent | null> {
     const rows: StoredEventRow[] = await this.manager.query(
       `SELECT event_id, kind, outlet_id, payload_hash, amount_minor, accepted_at

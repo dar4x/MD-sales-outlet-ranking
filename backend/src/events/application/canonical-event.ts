@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 
 /* Internal deps */
-import type { SaleInput } from '../domain/event.js';
+import type { SaleInput, ReturnInput } from '../domain/event.js';
 
 // Builds one fixed text form of a sale so that retries which differ only in
 // JSON key order, line order or time zone offset produce the same hash.
@@ -45,4 +45,22 @@ export function canonicalizeSale(input: SaleInput): string {
 
 export function hashPayload(canonicalPayload: string): string {
   return createHash('sha256').update(canonicalPayload).digest('hex');
+}
+
+export function canonicalizeReturn(input: ReturnInput): string {
+  const lines = [...input.lines].sort((a, b) =>
+    a.return_line_id.localeCompare(b.return_line_id),
+  );
+  return JSON.stringify({
+    event_id: input.event_id,
+    kind: input.kind,
+    lines: lines.map((line) => ({
+      quantity: line.quantity,
+      return_line_id: line.return_line_id,
+      sale_line_id: line.sale_line_id,
+    })),
+    occurred_at: new Date(input.occurred_at).toISOString(),
+    outlet_id: input.outlet_id,
+    sale_receipt_id: input.sale_receipt_id,
+  });
 }

@@ -8,9 +8,14 @@ import {
   EventValidationError,
   ReceiptConflictError,
 } from '../domain/event-errors.js';
-import type { Acceptance, SaleInput } from '../domain/event.js';
+import type { Acceptance, SaleInput, EventInput } from '../domain/event.js';
+import { validateReturn, calculateReturn } from '../domain/validate-return.js';
 import { validateSale } from '../domain/validate-sale.js';
-import { canonicalizeSale, hashPayload } from './canonical-event.js';
+import {
+  canonicalizeSale,
+  canonicalizeReturn,
+  hashPayload,
+} from './canonical-event.js';
 import type { EventLedgerRepository } from './ports/event-repositories.js';
 import type { ProductLookup } from '../../products/application/ports/product-catalogue.js';
 
@@ -26,20 +31,22 @@ export class IngestEvent {
     private readonly refreshRequester: RankingRefreshRequester,
   ) {}
 
-  async execute(sale: SaleInput): Promise<IngestEventResult> {
+  async execute(sale: EventInput): Promise<IngestEventResult> {
     // Validate first: a broken sale must give 422, and canonicalizeSale
     // would throw on an unparsable date.
-    validateSale(sale);
+    if (sale.kind === 'sale') validateSale(sale);
+    else validateReturn(sale);
 
-    const receipt = createSaleReceipt(sale);
-    const canonicalPayload = canonicalizeSale(sale);
+    const receipt = sale.kind === 'sale' ? createSaleReceipt(sale) : null;
+    const canonicalPayload =
+      sale.kind === 'sale' ? canonicalizeSale(sale) : canonicalizeReturn(sale);
     const payloadHash = hashPayload(canonicalPayload);
     const acceptance: Acceptance = {
       event_id: sale.event_id,
       outlet_id: sale.outlet_id,
-      kind: 'sale',
+      kind: sale.kind,
       accepted_at: this.clock.now(),
-      amount_minor: receipt.gross_amount_minor,
+      amount_minor: receipt?.gross_amount_minor ?? 0n,
       duplicate: false,
     };
 
@@ -76,16 +83,24 @@ export class IngestEvent {
           return this.handleRetry(sale.event_id, payloadHash, ports.events);
         }
 
-        // Products are checked only for a new event, after the identity check,
-        // so a changed payload for a known event_id stays 409. Throwing here
-        // rolls back the ledger row inserted above.
-        await this.checkProducts(sale, ports.products);
-
-        // Same transaction as the ledger row: if the receipt or any line
-        // fails, the accepted event is rolled back too.
-        const receiptResult = await ports.receipts.insert(receipt);
-        if (receiptResult === 'receipt_conflict') {
-          throw new ReceiptConflictError(sale.receipt_id);
+        if (sale.kind === 'sale' && receipt !== null) {
+          await this.checkProducts(sale, ports.products);
+          const receiptResult = await ports.receipts.insert(receipt);
+          if (receiptResult === 'receipt_conflict')
+            throw new ReceiptConflictError(sale.receipt_id);
+        } else if (sale.kind === 'return') {
+          const original = await ports.receipts.findForUpdate(
+            sale.sale_receipt_id,
+          );
+          if (original === null)
+            throw new EventValidationError(
+              'unknown_receipt',
+              'The sale receipt does not exist.',
+            );
+          const refund = calculateReturn(sale, original);
+          await ports.receipts.saveReturn(refund);
+          acceptance.amount_minor = refund.amount_minor;
+          await ports.events.updateAmount(sale.event_id, refund.amount_minor);
         }
 
         // Only a newly accepted event reaches this line: retries, conflicts
