@@ -12,6 +12,18 @@ import {
 } from 'class-validator';
 
 export class EnvironmentVariables {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  REALTIME_REFRESH_INTERVAL_MS: number = 5000;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  REALTIME_COALESCE_MS: number = 250;
+
   @IsIn(['KGS'])
   CURRENCY: string = 'KGS';
 
