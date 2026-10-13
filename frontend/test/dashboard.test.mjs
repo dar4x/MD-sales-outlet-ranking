@@ -26,6 +26,26 @@ const { RankingTable } = await vite.ssrLoadModule(
 const { subscribeToRankings } = await vite.ssrLoadModule(
   '/src/realtime/rankings-subscription.ts',
 );
+const { isOutletCard, isOutletList, isOutletSettings } =
+  await vite.ssrLoadModule('/src/types/outlets.ts');
+const { isAlertList } = await vite.ssrLoadModule('/src/types/alerts.ts');
+const { isProductList } = await vite.ssrLoadModule('/src/types/products.ts');
+const { getOutlets, getOutletCard, getOutletSettings, patchOutletSettings } =
+  await vite.ssrLoadModule('/src/api/outlets.ts');
+const { getAlerts } = await vite.ssrLoadModule('/src/api/alerts.ts');
+const { getProducts } = await vite.ssrLoadModule('/src/api/products.ts');
+const { buildSettingsPatch } = await vite.ssrLoadModule(
+  '/src/outlets/settings.ts',
+);
+const { OutletCardView } = await vite.ssrLoadModule(
+  '/src/components/OutletCardView.tsx',
+);
+const { AlertsTable } = await vite.ssrLoadModule(
+  '/src/components/AlertsTable.tsx',
+);
+const { OutletSettingsForm } = await vite.ssrLoadModule(
+  '/src/components/OutletSettingsForm.tsx',
+);
 
 function snapshot(overrides = {}) {
   return {
@@ -367,4 +387,318 @@ test('StrictMode immediate cleanup opens no transport; separate tabs own separat
   assert.equal(second.connected, true);
   assert.equal(second.listenerCount('rankings.snapshot'), 1);
   closeSecond();
+});
+
+const outlet = {
+  outlet_id: '00000000-0000-4000-8000-000000000001',
+  name: 'Outlet A',
+  time_zone: 'Asia/Bishkek',
+};
+const settings = {
+  outlet_id: outlet.outlet_id,
+  daily_plan_minor: '5000000',
+  responsible_person: { name: 'Manager', email: 'manager@example.com' },
+};
+const metrics = {
+  net_revenue_minor: '900719925474099301',
+  receipt_count: 2,
+  average_check_minor: '450359962737049650.500000',
+};
+const card = {
+  outlet,
+  settings,
+  as_of: '2026-10-13T10:00:00.000Z',
+  window: 'hour',
+  metrics,
+  series: [
+    {
+      starts_at: '2026-10-13T09:00:00.000Z',
+      ends_at: '2026-10-13T09:05:00.000Z',
+      metrics,
+    },
+  ],
+  top_products: [
+    {
+      product_id: 'product',
+      name: 'Bread',
+      net_quantity: -1,
+      net_revenue_minor: '-500',
+    },
+  ],
+  today_plan: {
+    local_date: '2026-10-13',
+    daily_plan_minor: '5000000',
+    net_revenue_minor: '900719925474099301',
+    progress_bps: 1801439850948198,
+  },
+};
+const stale = {
+  episode_id: 'episode-1',
+  outlet_id: outlet.outlet_id,
+  kind: 'stale',
+  local_date: null,
+  opened_at: card.as_of,
+  resolved_at: null,
+  facts: {
+    last_activity_at: card.as_of,
+    timeout_seconds: 300,
+    recipient: settings.responsible_person,
+  },
+};
+const behindPlan = {
+  ...stale,
+  episode_id: 'episode-2',
+  kind: 'behind_plan',
+  local_date: '2026-10-13',
+  facts: {
+    daily_plan_minor: '5000000',
+    net_revenue_minor: '-500',
+    cutoff_at: card.as_of,
+    recipient: settings.responsible_person,
+  },
+};
+const product = {
+  product_id: 'product',
+  sku: 'BREAD',
+  name: 'Bread',
+  unit_price_minor: '9007199254740993',
+};
+
+test('outlet contracts retain decimal average checks, money strings and zero/negative values', () => {
+  assert.equal(isOutletList({ items: [outlet] }), true);
+  assert.equal(isOutletList({ items: [] }), true);
+  assert.equal(isOutletSettings(settings), true);
+  assert.equal(
+    isOutletSettings({ ...settings, daily_plan_minor: 5000000 }),
+    false,
+  );
+  assert.equal(isOutletCard(card), true);
+  assert.equal(
+    isOutletCard({
+      ...card,
+      metrics: { ...metrics, average_check_minor: null },
+    }),
+    true,
+  );
+  assert.equal(
+    isOutletCard({ ...card, metrics: { ...metrics, net_revenue_minor: 123 } }),
+    false,
+  );
+  assert.equal(
+    isOutletCard({ ...card, settings: { ...settings, outlet_id: 'wrong' } }),
+    false,
+  );
+  assert.equal(isOutletCard({ ...card, window: 'day' }), false);
+});
+
+test('outlet card displays all statistics, numeric strings, series and top products', () => {
+  const html = renderToStaticMarkup(createElement(OutletCardView, { card }));
+  for (const text of [
+    metrics.net_revenue_minor,
+    metrics.average_check_minor,
+    'Today’s net revenue',
+    'Time buckets',
+    'Bread',
+    '-500',
+  ])
+    assert.ok(html.includes(text), text);
+  const large = {
+    ...card,
+    top_products: [{ ...card.top_products[0], net_quantity: 1e18 }],
+    today_plan: { ...card.today_plan, progress_bps: 1e18 },
+  };
+  assert.equal(isOutletCard(large), true);
+  assert.match(
+    renderToStaticMarkup(createElement(OutletCardView, { card: large })),
+    /Outside safe display range/,
+  );
+  assert.match(
+    renderToStaticMarkup(
+      createElement(OutletCardView, {
+        card: { ...card, top_products: [], series: [] },
+      }),
+    ),
+    /No product activity/,
+  );
+});
+
+test('outlet API clients use exact paths/windows and reject a mismatched card', async (context) => {
+  const responses = {
+    '/api/outlets': { items: [outlet] },
+    [`/api/outlets/${outlet.outlet_id}/card`]: card,
+    [`/api/outlets/${outlet.outlet_id}/settings`]: settings,
+  };
+  const mock = context.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.pathname.endsWith('/card'))
+      assert.equal(url.searchParams.get('window'), 'hour');
+    return Response.json(responses[url.pathname]);
+  });
+  const signal = new AbortController().signal;
+  assert.deepEqual(await getOutlets(signal), [outlet]);
+  assert.deepEqual(await getOutletCard(outlet.outlet_id, 'hour', signal), card);
+  assert.deepEqual(await getOutletSettings(outlet.outlet_id, signal), settings);
+  mock.mock.mockImplementation(async () =>
+    Response.json({ ...card, window: 'business_day' }),
+  );
+  await assert.rejects(
+    getOutletCard(outlet.outlet_id, 'hour', signal),
+    /Unexpected outlet card/,
+  );
+});
+
+test('settings patches include only changed fields and preserve values above Number precision', () => {
+  const fields = {
+    daily_plan_minor: settings.daily_plan_minor,
+    ...settings.responsible_person,
+  };
+  assert.deepEqual(
+    buildSettingsPatch(settings, {
+      ...fields,
+      daily_plan_minor: '9007199254740993',
+    }),
+    { daily_plan_minor: '9007199254740993' },
+  );
+  assert.deepEqual(
+    buildSettingsPatch(settings, { ...fields, name: ' New manager ' }),
+    { responsible_person: { name: 'New manager', email: fields.email } },
+  );
+  assert.throws(
+    () => buildSettingsPatch(settings, fields),
+    /no settings changes/,
+  );
+  for (const value of ['0', '-1', '1.5', '01', '9223372036854775808'])
+    assert.throws(
+      () =>
+        buildSettingsPatch(settings, { ...fields, daily_plan_minor: value }),
+      /positive integer string/,
+    );
+  assert.throws(
+    () => buildSettingsPatch(settings, { ...fields, name: ' ' }),
+    /required/,
+  );
+});
+
+test('settings PATCH sends JSON strings and validates the returned outlet identity', async (context) => {
+  const patch = { daily_plan_minor: '9007199254740993' };
+  const updated = { ...settings, ...patch };
+  const mock = context.mock.method(
+    globalThis,
+    'fetch',
+    async (url, options) => {
+      assert.equal(url.pathname, `/api/outlets/${outlet.outlet_id}/settings`);
+      assert.equal(options.method, 'PATCH');
+      assert.equal(options.headers['Content-Type'], 'application/json');
+      assert.deepEqual(JSON.parse(options.body), patch);
+      return Response.json(updated);
+    },
+  );
+  const signal = new AbortController().signal;
+  assert.deepEqual(
+    await patchOutletSettings(outlet.outlet_id, patch, signal),
+    updated,
+  );
+  mock.mock.mockImplementation(async () =>
+    Response.json({ ...updated, outlet_id: 'wrong' }),
+  );
+  await assert.rejects(
+    patchOutletSettings(outlet.outlet_id, patch, signal),
+    /Unexpected outlet settings/,
+  );
+});
+
+test('settings form starts with exact values and prevents unchanged saves', () => {
+  const html = renderToStaticMarkup(
+    createElement(OutletSettingsForm, {
+      settings: { ...settings, daily_plan_minor: '9007199254740993' },
+      onSaved: () => {},
+    }),
+  );
+  assert.ok(html.includes('value="9007199254740993"'));
+  assert.ok(html.includes('manager@example.com'));
+  assert.match(html, /disabled=""[^>]*>Save settings/);
+});
+
+test('alerts validate both fact shapes and render active/resolved indicators', () => {
+  assert.equal(isAlertList({ items: [stale, behindPlan] }), true);
+  assert.equal(isAlertList({ items: [] }), true);
+  assert.equal(isAlertList({ items: [{ ...stale, kind: 'unknown' }] }), false);
+  assert.equal(
+    isAlertList({
+      items: [
+        {
+          ...behindPlan,
+          facts: { ...behindPlan.facts, daily_plan_minor: 5000000 },
+        },
+      ],
+    }),
+    false,
+  );
+  const html = renderToStaticMarkup(
+    createElement(AlertsTable, {
+      alerts: [stale, { ...behindPlan, resolved_at: card.as_of }],
+      outlets: [outlet],
+    }),
+  );
+  for (const text of [
+    'Outlet A',
+    'Stale',
+    'Behind plan',
+    'Active',
+    'Resolved',
+    '-500',
+  ])
+    assert.ok(html.includes(text), text);
+  assert.match(
+    renderToStaticMarkup(
+      createElement(AlertsTable, { alerts: [], outlets: [] }),
+    ),
+    /No alerts match/,
+  );
+});
+
+test('alert filters use only supported query fields; product prices stay strings', async (context) => {
+  const mock = context.mock.method(globalThis, 'fetch', async (url) => {
+    assert.equal(url.pathname, '/api/alerts');
+    assert.deepEqual(
+      [...url.searchParams.entries()],
+      [
+        ['active_only', 'false'],
+        ['outlet_id', outlet.outlet_id],
+      ],
+    );
+    return Response.json({ items: [stale] });
+  });
+  const signal = new AbortController().signal;
+  assert.deepEqual(await getAlerts(false, outlet.outlet_id, signal), [stale]);
+  mock.mock.mockImplementation(async (url) => {
+    assert.equal(url.pathname, '/api/products');
+    return Response.json({ items: [product] });
+  });
+  assert.deepEqual(await getProducts(signal), [product]);
+  assert.equal(isProductList({ items: [] }), true);
+  assert.equal(
+    isProductList({ items: [{ ...product, unit_price_minor: 123 }] }),
+    false,
+  );
+});
+
+test('remaining API clients expose business errors and reject malformed list responses', async (context) => {
+  const mock = context.mock.method(globalThis, 'fetch', async () =>
+    Response.json(
+      { code: 'database_unavailable', message: 'Database unavailable.' },
+      { status: 503 },
+    ),
+  );
+  const signal = new AbortController().signal;
+  for (const load of [
+    () => getOutlets(signal),
+    () => getOutletSettings(outlet.outlet_id, signal),
+    () => getAlerts(true, '', signal),
+    () => getProducts(signal),
+  ])
+    await assert.rejects(load(), /Database unavailable/);
+  mock.mock.mockImplementation(async () => Response.json({ items: [{}] }));
+  await assert.rejects(getOutlets(signal), /Unexpected outlet list/);
+  await assert.rejects(getAlerts(true, '', signal), /Unexpected alerts/);
+  await assert.rejects(getProducts(signal), /Unexpected products/);
 });
