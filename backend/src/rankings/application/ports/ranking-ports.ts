@@ -9,7 +9,7 @@ export interface RankingQuery {
 export interface RankingPublisher {
   publish(snapshot: RankingSnapshot): Promise<void>;
 }
-// Request only after commit; the future adapter coalesces batches using env cadence.
-export interface RankingRefresh {
+// Request only after commit; the adapter coalesces batches using env cadence.
+export interface RankingRefreshRequester {
   request(): void;
 }
