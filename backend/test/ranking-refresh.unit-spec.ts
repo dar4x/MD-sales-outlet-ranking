@@ -10,7 +10,7 @@ await it('coalesces 50 requests into exactly one refresh', async () => {
       calls += 1;
     },
     20,
-    assert.fail,
+    (error) => assert.fail(String(error)),
   );
   try {
     for (let index = 0; index < 50; index += 1) refresh.request();
@@ -27,7 +27,7 @@ await it('waits for the trailing delay after the last request', async () => {
       calls += 1;
     },
     80,
-    assert.fail,
+    (error) => assert.fail(String(error)),
   );
   try {
     refresh.request();
@@ -65,7 +65,7 @@ await it('runs exactly one more refresh for requests during a running refresh', 
       active -= 1;
     },
     10,
-    assert.fail,
+    (error) => assert.fail(String(error)),
   );
   try {
     refresh.request();
@@ -113,7 +113,7 @@ await it('cancels a queued refresh on shutdown', async () => {
       calls += 1;
     },
     20,
-    assert.fail,
+    (error) => assert.fail(String(error)),
   );
   refresh.request();
   refresh.onModuleDestroy();
