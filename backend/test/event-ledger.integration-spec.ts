@@ -61,4 +61,25 @@ await describe('PostgresEventLedgerRepository', async () => {
 
     assert.equal(secondResult, 'event_conflict');
   });
+
+  await it('find returns the stored hash and original acceptance', async () => {
+    const repository = new PostgresEventLedgerRepository(dataSource.manager);
+    const event = buildAcceptedEvent(randomUUID());
+    await repository.insert(event);
+
+    const stored = await repository.find(event.event_id);
+
+    assert.deepEqual(stored, {
+      payload_hash: event.payload_hash,
+      acceptance: event.acceptance,
+    });
+  });
+
+  await it('find returns null for an unknown event_id', async () => {
+    const repository = new PostgresEventLedgerRepository(dataSource.manager);
+
+    const stored = await repository.find(randomUUID());
+
+    assert.equal(stored, null);
+  });
 });

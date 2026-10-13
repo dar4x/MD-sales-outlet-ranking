@@ -2,10 +2,49 @@
 import type { EntityManager } from 'typeorm';
 
 /* Internal deps */
-import type { AcceptedEvent } from '../domain/event.js';
+import type { EventKind } from '../../shared/domain/value-types.js';
+import type { EventLedgerRepository } from '../application/ports/event-repositories.js';
+import type { AcceptedEvent, StoredEvent } from '../domain/event.js';
 
-export class PostgresEventLedgerRepository {
+// Raw row shape from node-postgres: bigint arrives as a string and
+// timestamptz as a Date, so both are converted explicitly in find().
+interface StoredEventRow {
+  event_id: string;
+  kind: EventKind;
+  outlet_id: string;
+  payload_hash: string;
+  amount_minor: string;
+  accepted_at: Date;
+}
+
+export class PostgresEventLedgerRepository implements EventLedgerRepository {
   constructor(private readonly manager: EntityManager) {}
+
+  async find(eventId: string): Promise<StoredEvent | null> {
+    const rows: StoredEventRow[] = await this.manager.query(
+      `SELECT event_id, kind, outlet_id, payload_hash, amount_minor, accepted_at
+       FROM accepted_events
+       WHERE event_id = $1`,
+      [eventId],
+    );
+
+    const row = rows[0];
+    if (row === undefined) {
+      return null;
+    }
+    return {
+      payload_hash: row.payload_hash,
+      acceptance: {
+        event_id: row.event_id,
+        outlet_id: row.outlet_id,
+        kind: row.kind,
+        accepted_at: row.accepted_at.toISOString(),
+        amount_minor: BigInt(row.amount_minor),
+        // The stored row is the original acceptance; the caller marks retries.
+        duplicate: false,
+      },
+    };
+  }
 
   async insert(event: AcceptedEvent): Promise<'inserted' | 'event_conflict'> {
     // ON CONFLICT instead of SELECT-then-INSERT: two concurrent retries of
