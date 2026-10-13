@@ -584,3 +584,66 @@ and atomic episode/outbox records give less coupling without redundant handlers.
 - No push, PR creation or merge: user explicitly requires approval before pushing.
   MYLOG.md was neither edited nor staged; its pre-existing change remains.
   No protected root documentation changed. No git dates overridden.
+
+
+## Frontend rankings dashboard — 2026-10-13
+
+- Resumed after laptop shutdown by checking branch, working tree, files and
+  Compose. feature/dashboard already existed at latest dev (c3ab20e); no
+  implementation files had been written. Preserved the pre-existing MYLOG.md
+  change. Its diff SHA-256 remained
+  5785eda9e80a1a99d16aeee6da70231cecc0c75b0678b6568818ce685927eb6e.
+  Did not recreate the branch, discard changes or reset database data.
+- Inspected independent React/Vite frontend, contract/domain/architecture,
+  backend controllers and RankingSnapshot/Socket.IO subscription implementation.
+  Used current Context7 React and Socket.IO documentation for cleanup, reconnect
+  and transport fallback. No dependencies were installed or added.
+- Connected GET /api/rankings, exact hour/business_day selector, localStorage
+  restoration, validated unknown responses, cancellation/timeout and retry.
+  Added basic HTML ranking table with ranks, exact BigInt-formatted money,
+  receipts, movement and leader/laggard/stale/behind_plan flags. Kept design rough.
+- Added owned sockets, subscriptions on every reconnect, acknowledgement and
+  initial-snapshot timeouts, named listener cleanup and unsubscribe/disconnect.
+  Same-window duplicate/older snapshots do not overwrite newer data.
+  Production rapid switching exposed cancelled polling-upgrade console errors;
+  fixed with WebSocket-first plus tryAllTransports polling fallback and reran
+  production checks successfully.
+- Frontend typecheck, lint, format:check, build and node:test all passed; final
+  tests: 10 passed, zero failures. Tests use the existing Vite transform and Node
+  test runner, including contract/money/order/table/socket lifecycle/timeout.
+- Real Playwright Chromium development checks passed: both windows rendered 41
+  existing outlets; direct PostgreSQL SQL agreed with Bishkek business-day
+  revenue 55340232221132258342 and 166 receipts. Both tabs received real simulator
+  sales without reload; differing subscriptions worked, saved-window reload
+  restored rows, and backend restart retained tables then produced fresh live
+  snapshots without reload.
+- Only after those checks, audited and removed application ping/pong UI, helpers,
+  HTTP endpoint, gateway/service/module/types and obsolete demo tests. Startup
+  and Compose depend on database health, not the demo. Kept /api/health and the
+  shared Socket.IO adapter/transport heartbeat. Added health success, sanitized
+  503 and real PostgreSQL e2e coverage. Current source/tests/API contract contain
+  no ping/pong demonstration references; historical logs remain intact.
+- Backend typecheck, lint, format:check and build passed after removal. Compiled
+  all tests, then ran all unit tests plus health.e2e-spec and
+  realtime-rankings-timer.e2e-spec using sales_ranking_test: 52 passed, zero
+  failures. Did not run the full suite because several tests truncate existing
+  test data. No truncate/delete/reset commands or migrations were executed.
+- Post-removal real checks passed: health 200, removed ping 404, both browser tabs
+  received simulator updates and showed rank movement. High-rate sales reset the
+  backend's existing trailing refresh delay until the burst stops; observed and
+  documented rather than changing backend protocol behavior.
+- Real simulator totals: 52 Almaty sales plus 412 Moscow sales, zero rejected or
+  failed. Development has 901 receipts and 931 accepted events afterward; all
+  41 outlets and historical records remain. Simulators stopped normally.
+- Final production preview checks passed in two actual tabs: hour/business_day,
+  periodic snapshots, one HTTP request per mount, exact outgoing subscribe and
+  unsubscribe frames, zero console errors/warnings in fresh pages. Deliberate
+  WebSocket handshake failure fell back to actual HTTP polling and live updates.
+  Mocked production browser checks passed loading/empty/503/retry/disconnected
+  states and blocked localStorage. Early browser harness attempts that closed
+  WebSocket gracefully or threw synchronously were not valid handshake-error
+  simulations; the successful fallback test used an actual failed upgrade URL.
+- README now documents current setup, integration checks, safe test subset,
+  transport behavior and limitations. Earlier foundation checks are labeled
+  historical. Other browsers, deployment and visual design remain unverified.
+  Outlet details were not started. No merge to dev or main was performed.
