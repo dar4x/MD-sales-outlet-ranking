@@ -89,7 +89,7 @@ export class EvaluateMiddayAlerts {
             recipient: outlet.responsible_person,
           },
         });
-        await ports.outbox.insert({
+        const jobResult = await ports.outbox.insert({
           job_id: jobId,
           episode_id: episodeId,
           notification_key: 'alert:' + episodeId,
@@ -113,6 +113,8 @@ export class EvaluateMiddayAlerts {
           sent_at: null,
           last_error: null,
         });
+        if (jobResult !== 'inserted')
+          throw new Error('Notification identity conflict.');
         return true;
       });
       if (changed) this.refresh.request();

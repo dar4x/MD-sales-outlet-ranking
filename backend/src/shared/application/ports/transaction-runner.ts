@@ -11,8 +11,7 @@ import type {
 import type { AlertEvaluationQuery } from '../../../alerts/application/ports/alert-evaluation-query.js';
 import type { OutboxRepository } from '../../../notifications/application/ports/outbox-ports.js';
 import type { ProductLookup } from '../../../products/application/ports/product-catalogue.js';
-// Only ports implemented so far; add outlets, alerts, outbox here
-// when their features arrive.
+// The callback receives transaction-bound ports, never a QueryRunner.
 export interface TransactionPorts {
   events: EventLedgerRepository;
   receipts: SaleReceiptRepository;
