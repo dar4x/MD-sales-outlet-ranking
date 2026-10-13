@@ -12,6 +12,9 @@ import {
 } from 'class-validator';
 
 export class EnvironmentVariables {
+  @IsIn(['KGS'])
+  CURRENCY: string = 'KGS';
+
   @IsIn(['development', 'production', 'test'])
   NODE_ENV!: 'development' | 'production' | 'test';
 

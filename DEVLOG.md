@@ -244,3 +244,72 @@ and atomic episode/outbox records give less coupling without redundant handlers.
   `git push -u origin feature/events-ingestion`, then `gh --version` and
   `gh auth status`; create a PR with base dev only if gh is installed/logged in.
   This entry does not claim those later commands already succeeded.
+
+
+## Rankings — 2026-10-13T15:07:15+06:00
+
+- Continued feature/rankings after `git status --short --branch` and
+  `git log --oneline -3`; initial HEAD was aaba509. The existing MYLOG.md
+  change was left untouched and excluded from every commit.
+- Added GetRankings, the existing RankingQuery port's optional asOf,
+  PostgresRankingQuery and thin rankings HTTP presentation/module wiring.
+  One parameterized SQL statement captures the clock once, calculates
+  occurrence-time half-open windows, all-outlet totals, rounded decimal-string
+  averages, stable unique ranks, preceding-hour dynamics and flags.
+  Business-day midnight uses each outlet's IANA zone, including DST.
+  Return ingestion remains pending with one empty return_totals CTE;
+  stale and behind_plan remain false.
+- Test scripts override POSTGRES_DB with sales_ranking_test and use
+  --test-concurrency=1. assertTestDatabase rejects other databases before test
+  connections. Rankings beforeEach truncates only sale_lines, sale_receipts and
+  accepted_events; outlet enumeration is checked against SELECT outlet_id FROM
+  outlets. The single-outlet test uses a rolled-back temporary view and never
+  deletes catalogue rows. No command migrated, reset or ingested into dev.
+- `cd backend && npm run test:db:setup` passed: connects to postgres,
+  creates sales_ranking_test if missing and applies migrations to that database.
+  Baseline `npm test`: 85 tests passed, zero failed.
+- Observed red tests before implementation: average null versus
+  "4611686018427387904"; ranks all zero versus 1..N; business-day hour start
+  versus outlet midnight; dynamics null versus previous revenue "3".
+  Each feature's matching tests passed after implementation in its small commit.
+  Setup initially failed TS2345 for the union of TypeORM driver options;
+  narrowing the driver to postgres fixed it before connecting.
+  Backend lint initially reported no-floating-promises on the guard test;
+  awaiting it() fixed the error, and lint/typecheck passed again.
+- Final restored backend checks all exited 0:
+  `npm run typecheck`, `npm run lint`, `npm run format:check`,
+  `npm run build`, `npm test`.
+  Final suite: 97 tests, 9 suites, 97 passed, 0 failed/cancelled/skipped/todo,
+  duration 6170.25189 ms. Includes real PostgreSQL rankings and HTTP POST sales
+  followed by GET rankings; ties, exact bigint-limit averages, both hour
+  boundaries, two zones' midnight and late events, spring/autumn Berlin DST,
+  previous-hour bounds, equal/one-outlet flags and HTTP query validation.
+- Frontend `npm run typecheck`, `npm run format:check` and
+  `npm run build` exited 0; Vite built 54 modules in 246 ms.
+  First frontend lint output was garbled by RTK;
+  `rtk proxy npm run lint` exited 0 with no warnings/errors.
+- Mutation checks compiled each changed source with
+  `node_modules/.bin/tsc -p test/tsconfig.json` and ran
+  `POSTGRES_DB=sales_ranking_test node --env-file-if-exists=../.env --test
+  --test-name-pattern=<matching test> .test-dist/test/rankings.integration-spec.js`.
+  Inclusive end: 1 test failed, "1009" versus "10".
+  UTC midnight: 1 test failed, 00:00Z versus previous-date 18:00Z.
+  Descending outlet_id: 1 test failed, reversed outlet ordering.
+  All three exited 1. A Python try/finally restored the exact source bytes;
+  no mutation was committed. Logs remain under /tmp/rankings-mutation-*.log.
+  After restoration `git diff --exit-code -- backend docs .env.example DEVLOG.md`
+  and `git diff --check` exited 0, then the full backend checks passed again.
+  The working tree still contains the pre-existing MYLOG.md edit.
+- Contract decisions: requested docs changes authorize whole-unit averages and
+  no flags when revenues are all equal, replacing the prior fractional/tied
+  behavior; DOMAIN_MODEL wording was aligned. Missing window continues to default
+  to business_day because API_CONTRACT was explicitly the source of truth and
+  its default was not in the requested contract change list. Bad/empty/repeated
+  window values and unknown fields get 422. CURRENCY is validated as KGS with a
+  KGS default and documented in .env.example.
+- Not verified: live database outage, browser rankings UI, return ingestion,
+  alert evaluation, live ranking broadcasts, production deployment, performance
+  under load, or each historical intermediate commit in isolation.
+- `gh auth status` confirmed authenticated dar4x access.
+  This entry uses real `date --iso-8601=seconds` output.
+  Push and PR creation follow this log commit; their success is not claimed here.

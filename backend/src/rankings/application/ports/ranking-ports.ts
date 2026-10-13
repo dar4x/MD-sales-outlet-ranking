@@ -4,7 +4,7 @@ import type {
 } from '../../../shared/domain/value-types.js';
 import type { RankingSnapshot } from '../read-models/ranking.js';
 export interface RankingQuery {
-  get(window: RankingWindow, asOf: UtcTimestamp): Promise<RankingSnapshot>;
+  get(window: RankingWindow, asOf?: UtcTimestamp): Promise<RankingSnapshot>;
 }
 export interface RankingPublisher {
   publish(snapshot: RankingSnapshot): Promise<void>;

@@ -33,7 +33,8 @@ ARCHITECTURE.md layers are unchanged.
 
 See API_CONTRACT.md for full wire field lists and src/_/domain/_.ts for records.
 Domain MinorUnits is bigint; JSON MoneyString is a decimal integer string.
-Average check is NumericString from SQL numeric division, potentially fractional;
+Ranking average check is rounded SQL numeric division encoded as a whole minor-unit
+string (see API_CONTRACT.md); other planned read metrics may use NumericString;
 it is a read metric, never payment arithmetic or persisted monetary value.
 Quantities are positive whole safe integers; limits prevent overflow in counts.
 IDs are UUID strings, normalized to lowercase by the parser before validation of

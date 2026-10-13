@@ -1,3 +1,5 @@
+import { assertTestDatabase } from './test-database.js';
+assertTestDatabase();
 /* External deps */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';

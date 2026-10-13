@@ -1,3 +1,5 @@
+import { assertTestDatabase } from './test-database.js';
+assertTestDatabase();
 /* External deps */
 import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
