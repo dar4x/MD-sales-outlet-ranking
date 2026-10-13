@@ -15,6 +15,17 @@ export class EnvironmentVariables {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(2147483)
+  STALE_TIMEOUT_SECONDS: number = 300;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  ALERT_EVALUATION_INTERVAL_MS: number = 5000;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   @Max(2147483647)
   REALTIME_REFRESH_INTERVAL_MS: number = 5000;
 

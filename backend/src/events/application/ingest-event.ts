@@ -110,6 +110,7 @@ export class IngestEvent {
           sale.outlet_id,
           acceptance.accepted_at,
         );
+        await ports.alerts.resolveStale(sale.outlet_id, acceptance.accepted_at);
         return { outcome: 'created', acceptance };
       },
     );
