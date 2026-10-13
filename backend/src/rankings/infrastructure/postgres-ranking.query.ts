@@ -27,7 +27,7 @@ export class PostgresRankingQuery implements RankingQuery {
       await this.dataSource.query(
         `
       WITH instant AS MATERIALIZED (
-        SELECT $1::text AS selected_window, COALESCE($2::timestamptz, clock_timestamp()) AS as_of
+        SELECT $1::text AS selected_window, date_trunc('milliseconds', COALESCE($2::timestamptz, clock_timestamp())) AS as_of
       ), bounds AS (
         SELECT o.*, i.as_of,
           CASE WHEN $1 = 'hour' THEN i.as_of - interval '1 hour'

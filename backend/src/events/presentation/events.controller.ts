@@ -27,7 +27,7 @@ interface StatusResponse {
 export class EventsController {
   constructor(private readonly ingestEvent: IngestEvent) {}
 
-  // SaleInput is an interface, so the global ValidationPipe skips this
+  // EventInput is an interface, so the global ValidationPipe skips this
   // parameter; ParseSaleEventPipe does all body validation.
   @Post()
   async ingest(

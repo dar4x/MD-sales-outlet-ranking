@@ -221,13 +221,11 @@ await describe('Return ingestion', async () => {
       sale_receipt_id: input.sale_receipt_id.toUpperCase(),
       outlet_id: input.outlet_id.toUpperCase(),
       occurred_at: '2026-10-13T12:00:00+06:00',
-      lines: [...input.lines]
-        .reverse()
-        .map((line) => ({
-          ...line,
-          sale_line_id: line.sale_line_id.toUpperCase(),
-          return_line_id: line.return_line_id.toUpperCase(),
-        })),
+      lines: [...input.lines].reverse().map((line) => ({
+        ...line,
+        sale_line_id: line.sale_line_id.toUpperCase(),
+        return_line_id: line.return_line_id.toUpperCase(),
+      })),
     });
     assert.equal(retry.status, 200);
     assert.deepEqual(retry.body, { ...first.body, duplicate: true });

@@ -9,7 +9,7 @@ import { EventValidationError } from '../domain/event-errors.js';
 import type { EventInput, SaleLine } from '../domain/event.js';
 import { SaleEventDto, ReturnEventDto } from './sale-event.dto.js';
 
-// Turns the raw POST /api/events body into a SaleInput. Every rejection is
+// Turns the raw POST /api/events body into an EventInput. Every rejection is
 // an EventValidationError, so the controller can answer 422 in one place.
 export class ParseSaleEventPipe implements PipeTransform<unknown, EventInput> {
   transform(body: unknown): EventInput {
