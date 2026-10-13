@@ -313,3 +313,99 @@ and atomic episode/outbox records give less coupling without redundant handlers.
 - `gh auth status` confirmed authenticated dar4x access.
   This entry uses real `date --iso-8601=seconds` output.
   Push and PR creation follow this log commit; their success is not claimed here.
+
+
+## Realtime rankings — 2026-10-13T15:27:35+06:00
+
+- Started with git status --short --branch; checked out dev and ran
+  git pull --ff-only. gh pr view 10 --json state,mergedAt,mergeCommit
+  showed MERGED at a71f5c119f7ad6b960425fa0d20c557a7cc6ddaa,
+  mergedAt 2026-10-13T09:10:53Z. git log --oneline -8 and rankings source
+  confirmed the merge. Created feature/realtime-rankings from dev.
+  The pre-existing MYLOG.md edit was left untouched and never staged.
+- Added validated REALTIME_REFRESH_INTERVAL_MS=5000 and REALTIME_COALESCE_MS=250
+  defaults and .env.example entries. Both are positive integer milliseconds
+  capped at 2147483647.
+- Renamed the existing RankingRefresh port to RankingRefreshRequester rather
+  than adding a competing port. Added a plain CoalescedRankingRefresh adapter,
+  PublishRankings use case and RankingsGateway. Nest factories wire the layers;
+  application code imports neither Nest nor Socket.IO.
+- Subscriptions use only Socket.IO rooms, one ranking window per client.
+  Subscribe acknowledges then sends GetRankings' initial snapshot to that
+  client only. Invalid subscribe/unsubscribe payloads acknowledge errors without
+  changing rooms. Reconnect loses the subscription. PublishRankings computes
+  once for each subscribed window and broadcasts that snapshot to its room.
+  Existing flat realtime ping/pong was unchanged and its real WebSocket test passes.
+- IngestEvent now awaits TransactionRunner and calls the requester only for
+  outcome created, after commit. A separate pool connection test observes the
+  committed receipt when request() is called. Retries and 409/422 rejections
+  produce no ranking refresh. Existing standalone ingestion tests explicitly
+  supply a no-op request callback.
+- The event delay is trailing: each queued event request resets the timeout.
+  Requests during a running read set one pending follow-up; reads never overlap.
+  Refresh failures are logged and later refreshes continue. Periodic ticks
+  request rolling-window refresh, leave already queued delays alone, and both
+  timers are cleared on shutdown.
+- Real Socket.IO tests reuse the existing frontend socket.io-client dependency
+  via createRequire; no dependency or lockfile was added or changed.
+  Set short test configuration before dynamically importing AppModule so
+  ConfigModule validates the intended values. Database remains sales_ranking_test;
+  npm test still forces this name and --test-concurrency=1. New rankings tests
+  clear only sale_lines, sale_receipts and accepted_events, guarded by
+  assertTestDatabase. No development database migration/reset/ingestion was run.
+- Observed failures before fixes: missing reflect-metadata produced
+  TypeError: Reflect.getMetadata is not a function; coalescer tests initially
+  failed TS2307 before implementation, then TS2345 because assert.fail did not
+  accept unknown. Explicit error-to-string assertion callbacks fixed it.
+  Subscribe tests timed out before gateway implementation; the created-sale
+  snapshot and timer-only tests timed out before their hooks were implemented.
+  A new short-interval test saw zero refreshes when ticks reset the delay forever;
+  leaving a queued timeout alone fixed it. Malformed unsubscribe returned
+  ok:true before validation; the added test passed after the fix.
+- Initial config/coalescer commits were followed by corrective test commits
+  because the first shell commands continued after a failed check. Subsequent
+  mutation/verification commands used explicit checks or set -e.
+  No history was rewritten and tests were neither deleted nor weakened.
+- Initial npm run lint output was garbled by RTK. Re-ran rtk proxy npm run lint:
+  10 errors (require-await in publisher/test callbacks and inline import type).
+  Explicit Promise.resolve/Promise.reject returns and a type-only client module
+  import fixed these errors; subsequent lint/typecheck exited 0.
+- Full pre-mutation backend checks passed: npm run typecheck,
+  rtk proxy npm run lint, npm run format:check, npm run build, npm test.
+  Baseline: 115 tests, 10 suites, 115 passed, zero failed/cancelled/skipped/todo;
+  duration 10502.09635 ms.
+- Mutation checks used a temporary Python script with try/finally restoration.
+  Each source mutation was compiled using node_modules/.bin/tsc -p test/tsconfig.json,
+  then tested using POSTGRES_DB=sales_ranking_test node
+  --env-file-if-exists=../.env --test --test-name-pattern=<matching test>
+  .test-dist/test/<matching test file>.js. All four compiled and each test exited 1:
+  removing coalescing: 50 refreshes versus 1;
+  refreshing duplicates: 3 snapshots versus 2;
+  removing the pending trailing read: 1 refresh versus 2;
+  removing periodic request(): timer-only test failed with Snapshot timeout.
+  Logs are /tmp/realtime-rankings-mutation-*.log; no mutation was committed.
+- Restored source passed git diff --exit-code -- backend docs .env.example DEVLOG.md
+  and git diff --check. Only the original MYLOG.md edit remained in the working
+  tree. Then reran all backend checks: npm run typecheck, rtk proxy npm run lint,
+  npm run format:check, npm run build, npm test; all exited 0.
+  Final suite: 115 tests, 10 suites, 115 passed, zero failed/cancelled/skipped/todo;
+  duration 10510.616503 ms.
+- The final concurrency test sent 50 parallel HTTP sales, ten each at five
+  outlets, to two subscribed clients. Observed one broadcast per client.
+  Both final snapshots were identical, and each matched current GET rankings'
+  outlet revenue, receipt counts and ranks (excluding time/identity comparison
+  against HTTP). Timer-only refresh, reconnect, room switching, malformed input,
+  initial client-only snapshot, error recovery, non-overlap and cleanup tests pass.
+- Frontend checks also exited 0: npm run typecheck, rtk proxy npm run lint,
+  npm run format:check, npm run build. Vite built 54 modules in 232 ms.
+- Updated API_CONTRACT in a separate docs commit for initial snapshots,
+  one-window rooms, reconnect loss, both config keys, trailing coalescing,
+  no-overlap, timer behavior and error recovery. DOMAIN_MODEL port names now
+  match RankingRefreshRequester. No prompt/contract conflict was found.
+- Not verified: actual browser-tab UI, production deployment, live database
+  outage recovery (unit callback rejection was used), distributed Socket.IO
+  adapters/multiple processes, long-running load behavior, returns/alerts,
+  or isolated success of every intermediate historical commit.
+- gh auth status confirmed authenticated dar4x access. Timestamp above is actual
+  date --iso-8601=seconds output. Push and PR creation follow this log commit;
+  their success is not claimed in this entry.
