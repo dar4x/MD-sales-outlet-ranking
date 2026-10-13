@@ -1,4 +1,4 @@
-# Domain design (implementation deferred)
+# Backend domain model
 
 ## Boundaries and dependencies
 
@@ -23,10 +23,9 @@ Feature folders: events, rankings, outlets, products, alerts, notifications.
 Each has domain/, application/ports/, infrastructure/, presentation/; read-heavy
 features additionally have application/read-models/. shared/domain/ holds scalar
 contracts; shared/application/ports/ holds clock and transaction boundaries.
-Rankings intentionally have no domain aggregate. Empty adapters/presentation
-folders reserve space, not implementations. Future use-case classes have execute()
-and are wired by Nest factories/tokens outside application. No Nest decorators,
-TypeORM objects or runtime tokens are introduced in this design-only branch.
+Rankings intentionally have no domain aggregate. Use-case classes have execute() and
+are wired by Nest factories/tokens outside application. Domain and application
+remain free of Nest decorators and TypeORM objects.
 ARCHITECTURE.md layers are unchanged.
 
 ## Types, ownership and units
@@ -83,7 +82,7 @@ Query models contain wire-safe strings, not aggregates or TypeORM entities.
   runs concurrently. One unique job per episode does not guarantee exactly-once
   SMTP: crash after acceptance can resend; reuse stable Message-ID on retry.
 
-## Use cases and ports (planned, no implementations)
+## Use cases and ports
 
 | Feature       | Use cases                                                           | Ports                                                                                                                                  |
 | ------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -120,11 +119,11 @@ average, IANA local-midnight conversion, all-outlet left joins, deterministic
 revenue/id ordering and separate acceptance activity. These are observations from
 source, not rerun verification in this branch. Re-read before future schema work.
 Do not inherit fractional quantities, the old receipt uniqueness scope, in-memory
-snapshot counters, or raw return amounts blindly. No migration is added here.
+snapshot counters, or raw return amounts blindly. Explicit migrations now persist returns, episodes, assessments and notification jobs.
 
 One-day scope: seeded catalogue/outlets, one currency, whole quantities, fixed
 chart bins, one worker. Defer catalogue CRUD, tax/discount/FX, authentication,
-custom charts and settings history. Later required tests: concurrent retries,
+custom charts and settings history. Required tests include concurrent retries,
 conflicting receipts, concurrent over-returns, rollback of state + outbox, stale
 reopening, strict noon equality, late events, restart/catch-up, DST midnight and
-numeric average. SQL queries reconstruct rankings from durable facts on restart.
+numeric average; these backend tests are implemented. SQL queries reconstruct rankings from durable facts on restart.
