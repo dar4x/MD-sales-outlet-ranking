@@ -1,5 +1,8 @@
 /* Internal deps */
-import type { Identifier } from '../../../shared/domain/value-types.js';
+import type {
+  Identifier,
+  UtcTimestamp,
+} from '../../../shared/domain/value-types.js';
 import type {
   AcceptedEvent,
   SaleReceipt,
@@ -13,7 +16,7 @@ export interface EventLedgerRepository {
 export interface SaleReceiptRepository {
   insert(receipt: SaleReceipt): Promise<'inserted' | 'receipt_conflict'>;
 }
-// recordAccepted (last_accepted_at) is added with the outlet activity step.
 export interface OutletActivityRepository {
   lock(outletId: Identifier): Promise<boolean>;
+  recordAccepted(outletId: Identifier, acceptedAt: UtcTimestamp): Promise<void>;
 }

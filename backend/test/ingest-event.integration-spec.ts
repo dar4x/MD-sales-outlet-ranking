@@ -86,9 +86,10 @@ async function countReceiptRows(
   return { receipts: Number(rows[0]?.receipts), lines: Number(rows[0]?.lines) };
 }
 
-// Wraps the real runner: the receipt and its lines are really inserted, then
-// an error is thrown inside the same transaction, as if a later step failed.
-class FailAfterReceiptRunner implements TransactionRunner {
+// Wraps the real runner: every write of a new event really happens (ledger,
+// receipt, lines, outlet activity), then an error is thrown inside the same
+// transaction, as if a step after them failed.
+class FailAtEndRunner implements TransactionRunner {
   constructor(private readonly inner: PostgresTransactionRunner) {}
 
   run<Result>(
@@ -97,16 +98,45 @@ class FailAfterReceiptRunner implements TransactionRunner {
     return this.inner.run((ports) => {
       const failingPorts: TransactionPorts = {
         ...ports,
-        receipts: {
-          insert: async (receipt) => {
-            await ports.receipts.insert(receipt);
-            throw new Error('Simulated failure after receipt insert.');
+        activity: {
+          lock: (outletId) => ports.activity.lock(outletId),
+          recordAccepted: async (outletId, acceptedAt) => {
+            await ports.activity.recordAccepted(outletId, acceptedAt);
+            throw new Error('Simulated failure after the last write.');
           },
         },
       };
       return operation(failingPorts);
     });
   }
+}
+
+// A fresh outlet per activity test, so last_accepted_at starts at NULL and
+// exact values can be checked no matter what earlier test runs stored.
+async function createTestOutlet(): Promise<string> {
+  const outletId = randomUUID();
+  await dataSource.query(
+    `INSERT INTO outlets (
+       outlet_id, name, time_zone, daily_plan_minor,
+       responsible_name, responsible_email, activated_at
+     )
+     VALUES ($1, $2, 'Asia/Bishkek', 100000, 'Test Person',
+             'test@example.com', '2026-10-01T00:00:00Z')`,
+    [outletId, `Test outlet ${outletId}`],
+  );
+  return outletId;
+}
+
+async function readLastAcceptedAt(outletId: string): Promise<string | null> {
+  const rows: { last_accepted_at: Date | null }[] = await dataSource.query(
+    'SELECT last_accepted_at FROM outlets WHERE outlet_id = $1',
+    [outletId],
+  );
+  const lastAcceptedAt = rows[0]?.last_accepted_at ?? null;
+  if (lastAcceptedAt === null) {
+    return null;
+  }
+  return lastAcceptedAt.toISOString();
 }
 
 function assertValidationCode(expectedCode: string) {
@@ -198,20 +228,25 @@ await describe('IngestEvent', async () => {
     ]);
   });
 
-  await it('rolls back the event, receipt and lines when a later step fails', async () => {
+  await it('rolls back event, receipt, lines and activity when a later step fails', async () => {
     const ingestEvent = new IngestEvent(
-      new FailAfterReceiptRunner(new PostgresTransactionRunner(dataSource)),
+      new FailAtEndRunner(new PostgresTransactionRunner(dataSource)),
       new FakeClock(),
     );
-    const sale = buildSale(randomUUID());
+    const outletId = await createTestOutlet();
+    const sale: SaleInput = { ...buildSale(randomUUID()), outlet_id: outletId };
 
-    await assert.rejects(ingestEvent.execute(sale), /failure after receipt/);
+    await assert.rejects(
+      ingestEvent.execute(sale),
+      /failure after the last write/,
+    );
 
     assert.equal(await countLedgerRows(sale.event_id), 0);
     assert.deepEqual(await countReceiptRows(sale.receipt_id), {
       receipts: 0,
       lines: 0,
     });
+    assert.equal(await readLastAcceptedAt(outletId), null);
   });
 
   await it('returns the original acceptance for an identical retry', async () => {
@@ -654,4 +689,136 @@ await describe('IngestEvent', async () => {
       );
     },
   );
+
+  await it('sets last_accepted_at when a new event is accepted', async () => {
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    );
+    const outletId = await createTestOutlet();
+    const sale: SaleInput = { ...buildSale(randomUUID()), outlet_id: outletId };
+
+    await ingestEvent.execute(sale);
+
+    assert.equal(await readLastAcceptedAt(outletId), FIRST_ACCEPTED_AT);
+  });
+
+  await it('does not refresh last_accepted_at for retries, conflicts or rejections', async () => {
+    const clock = new FakeClock();
+    const ingestEvent = new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      clock,
+    );
+    const outletId = await createTestOutlet();
+    const sale: SaleInput = { ...buildSale(randomUUID()), outlet_id: outletId };
+    await ingestEvent.execute(sale);
+    clock.current = LATER_ACCEPTED_AT;
+
+    // Identical retry (200).
+    await ingestEvent.execute(sale);
+    // Changed payload for the same event_id (409).
+    const changedSale = buildSale(sale.event_id);
+    changedSale.outlet_id = outletId;
+    await assert.rejects(ingestEvent.execute(changedSale), EventConflictError);
+    // New event reusing the receipt_id (409).
+    const receiptReuse: SaleInput = {
+      ...buildSale(randomUUID()),
+      outlet_id: outletId,
+      receipt_id: sale.receipt_id,
+    };
+    await assert.rejects(
+      ingestEvent.execute(receiptReuse),
+      ReceiptConflictError,
+    );
+    // New event with an unknown product (422).
+    const unknownProduct: SaleInput = {
+      ...buildSale(randomUUID()),
+      outlet_id: outletId,
+    };
+    unknownProduct.lines[0] = {
+      ...unknownProduct.lines[0]!,
+      product_id: randomUUID(),
+    };
+    await assert.rejects(
+      ingestEvent.execute(unknownProduct),
+      assertValidationCode('unknown_product'),
+    );
+
+    assert.equal(await readLastAcceptedAt(outletId), FIRST_ACCEPTED_AT);
+  });
+
+  await it('keeps the latest last_accepted_at when events arrive out of order', async () => {
+    const lateClock = new FakeClock();
+    lateClock.current = LATER_ACCEPTED_AT;
+    const outletId = await createTestOutlet();
+
+    // The event with the later accepted_at commits first.
+    await new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      lateClock,
+    ).execute({ ...buildSale(randomUUID()), outlet_id: outletId });
+    await new IngestEvent(
+      new PostgresTransactionRunner(dataSource),
+      new FakeClock(),
+    ).execute({ ...buildSale(randomUUID()), outlet_id: outletId });
+
+    assert.equal(await readLastAcceptedAt(outletId), LATER_ACCEPTED_AT);
+  });
+
+  await it('stores the latest accepted_at of 10 parallel new events', async () => {
+    const outletId = await createTestOutlet();
+
+    // Each call has its own clock: 06:00:00, 06:00:01, ... 06:00:09.
+    const calls = [];
+    for (let index = 0; index < 10; index += 1) {
+      const clock = new FakeClock();
+      clock.current = `2026-10-13T06:00:0${index}.000Z`;
+      const ingestEvent = new IngestEvent(
+        new PostgresTransactionRunner(dataSource),
+        clock,
+      );
+      calls.push(
+        ingestEvent.execute({
+          ...buildSale(randomUUID()),
+          outlet_id: outletId,
+        }),
+      );
+    }
+    const results = await Promise.all(calls);
+
+    for (const result of results) {
+      assert.equal(result.outcome, 'created');
+    }
+    assert.equal(
+      await readLastAcceptedAt(outletId),
+      '2026-10-13T06:00:09.000Z',
+    );
+  });
+
+  await it('records only the creator time for 10 parallel identical events', async () => {
+    const outletId = await createTestOutlet();
+    const sale: SaleInput = { ...buildSale(randomUUID()), outlet_id: outletId };
+
+    // Every retry has a later clock; only the creating call may be stored.
+    const calls = [];
+    for (let index = 0; index < 10; index += 1) {
+      const clock = new FakeClock();
+      clock.current = `2026-10-13T06:00:0${index}.000Z`;
+      const ingestEvent = new IngestEvent(
+        new PostgresTransactionRunner(dataSource),
+        clock,
+      );
+      calls.push(ingestEvent.execute(sale));
+    }
+    const results = await Promise.all(calls);
+
+    let creatorAcceptedAt: string | null = null;
+    for (const result of results) {
+      if (result.outcome === 'created') {
+        creatorAcceptedAt = result.acceptance.accepted_at;
+      }
+    }
+    assert.notEqual(creatorAcceptedAt, null);
+    assert.equal(await readLastAcceptedAt(outletId), creatorAcceptedAt);
+  });
 });

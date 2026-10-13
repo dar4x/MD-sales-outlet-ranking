@@ -102,6 +102,14 @@ export class IngestEvent {
       if (receiptResult === 'receipt_conflict') {
         throw new ReceiptConflictError(sale.receipt_id);
       }
+
+      // Only a newly accepted event reaches this line: retries, conflicts
+      // and validation failures returned or threw above, so they never
+      // refresh outlet activity.
+      await ports.activity.recordAccepted(
+        sale.outlet_id,
+        acceptance.accepted_at,
+      );
       return { outcome: 'created', acceptance };
     });
   }
