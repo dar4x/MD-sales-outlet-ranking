@@ -584,3 +584,123 @@ and atomic episode/outbox records give less coupling without redundant handlers.
 - No push, PR creation or merge: user explicitly requires approval before pushing.
   MYLOG.md was neither edited nor staged; its pre-existing change remains.
   No protected root documentation changed. No git dates overridden.
+
+
+## Frontend rankings dashboard — 2026-10-13
+
+- Resumed after laptop shutdown by checking branch, working tree, files and
+  Compose. feature/dashboard already existed at latest dev (c3ab20e); no
+  implementation files had been written. Preserved the pre-existing MYLOG.md
+  change. Its diff SHA-256 remained
+  5785eda9e80a1a99d16aeee6da70231cecc0c75b0678b6568818ce685927eb6e.
+  Did not recreate the branch, discard changes or reset database data.
+- Inspected independent React/Vite frontend, contract/domain/architecture,
+  backend controllers and RankingSnapshot/Socket.IO subscription implementation.
+  Used current Context7 React and Socket.IO documentation for cleanup, reconnect
+  and transport fallback. No dependencies were installed or added.
+- Connected GET /api/rankings, exact hour/business_day selector, localStorage
+  restoration, validated unknown responses, cancellation/timeout and retry.
+  Added basic HTML ranking table with ranks, exact BigInt-formatted money,
+  receipts, movement and leader/laggard/stale/behind_plan flags. Kept design rough.
+- Added owned sockets, subscriptions on every reconnect, acknowledgement and
+  initial-snapshot timeouts, named listener cleanup and unsubscribe/disconnect.
+  Same-window duplicate/older snapshots do not overwrite newer data.
+  Production rapid switching exposed cancelled polling-upgrade console errors;
+  fixed with WebSocket-first plus tryAllTransports polling fallback and reran
+  production checks successfully.
+- Frontend typecheck, lint, format:check, build and node:test all passed; final
+  tests: 10 passed, zero failures. Tests use the existing Vite transform and Node
+  test runner, including contract/money/order/table/socket lifecycle/timeout.
+- Real Playwright Chromium development checks passed: both windows rendered 41
+  existing outlets; direct PostgreSQL SQL agreed with Bishkek business-day
+  revenue 55340232221132258342 and 166 receipts. Both tabs received real simulator
+  sales without reload; differing subscriptions worked, saved-window reload
+  restored rows, and backend restart retained tables then produced fresh live
+  snapshots without reload.
+- Only after those checks, audited and removed application ping/pong UI, helpers,
+  HTTP endpoint, gateway/service/module/types and obsolete demo tests. Startup
+  and Compose depend on database health, not the demo. Kept /api/health and the
+  shared Socket.IO adapter/transport heartbeat. Added health success, sanitized
+  503 and real PostgreSQL e2e coverage. Current source/tests/API contract contain
+  no ping/pong demonstration references; historical logs remain intact.
+- Backend typecheck, lint, format:check and build passed after removal. Compiled
+  all tests, then ran all unit tests plus health.e2e-spec and
+  realtime-rankings-timer.e2e-spec using sales_ranking_test: 52 passed, zero
+  failures. Did not run the full suite because several tests truncate existing
+  test data. No truncate/delete/reset commands or migrations were executed.
+- Post-removal real checks passed: health 200, removed ping 404, both browser tabs
+  received simulator updates and showed rank movement. High-rate sales reset the
+  backend's existing trailing refresh delay until the burst stops; observed and
+  documented rather than changing backend protocol behavior.
+- Real simulator totals: 52 Almaty sales plus 412 Moscow sales, zero rejected or
+  failed. Development has 901 receipts and 931 accepted events afterward; all
+  41 outlets and historical records remain. Simulators stopped normally.
+- Final production preview checks passed in two actual tabs: hour/business_day,
+  periodic snapshots, one HTTP request per mount, exact outgoing subscribe and
+  unsubscribe frames, zero console errors/warnings in fresh pages. Deliberate
+  WebSocket handshake failure fell back to actual HTTP polling and live updates.
+  Mocked production browser checks passed loading/empty/503/retry/disconnected
+  states and blocked localStorage. Early browser harness attempts that closed
+  WebSocket gracefully or threw synchronously were not valid handshake-error
+  simulations; the successful fallback test used an actual failed upgrade URL.
+- README now documents current setup, integration checks, safe test subset,
+  transport behavior and limitations. Earlier foundation checks are labeled
+  historical. Other browsers, deployment and visual design remain unverified.
+  Outlet details were not started. No merge to dev or main was performed.
+
+
+## Functional frontend MVP completion — 2026-10-13
+
+- Resumed the existing feature/dashboard after the second laptop shutdown.
+  All dashboard commits through 626155e survived; README was already committed
+  and had no unfinished edit. Only MYLOG.md remained modified, with the same
+  recorded checksum. Restarted stopped Compose, compiled backend and frontend;
+  did not rebuild or refactor backend, recreate branches or discard work.
+- Added outlet list/selection, exact card HTTP reads for both contract windows,
+  metrics, daily plan, top products and UTC series tables. Card numeric average
+  checks stay strings, including fractional averages. Existing extreme test data
+  has aggregate quantities/progress outside the safe-number range; display
+  labels those fields instead of rejecting the whole card or claiming precision.
+- Added GET/PATCH settings with positive bigint-range string plan validation,
+  changed-field patches, responsible name/email editing, save/error/success
+  states, request cancellation, and automatic card refresh after a save.
+  Real Chromium test persisted plan 9007199254740993 plus name/email via PATCH,
+  verified GET/reload equality, then restored the original plan/contact through
+  the API. A subsequent real production read verified restoration.
+- Added active/history alerts with supported outlet filter, captured episode
+  facts and recipients, and the product catalogue with exact price strings.
+  No extra endpoints, backend imports, entry forms, dependencies or styling work.
+- Final frontend typecheck, lint, format:check, build and tests passed:
+  19 tests, zero failures. Added tests for all independent shapes, exact API
+  requests, changed-field PATCHes, huge money, decimal averages, malformed/error
+  replies, tables and safe-display handling. All original socket tests remain.
+- Final relevant backend checks passed without rebuilding the backend:
+  typecheck, lint, format:check, and 52 non-destructive tests (all unit tests plus
+  real PostgreSQL health and ranking timer e2e). The full destructive suite was
+  not run. No migrations, resets, truncation or deletion commands were used.
+- Real HTTP checks returned 200 for both ranking windows, outlet list, both card
+  windows, settings, active/all/outlet-filtered alerts and products. Removed ping
+  returned 404; health returned 200. Browser active alert counts vary normally as
+  simulator activity resolves stale episodes.
+- Actual Chromium development and production flows passed: outlet card window
+  switching, settings persistence, filtered/historical alerts, six products and
+  navigation back to live rankings. Production rapid window switching and page
+  refresh passed. Both tabs kept tables during backend stop and regained live
+  updates after restart without reload. Fresh full-flow production page had no
+  console errors/warnings; intentional outages emitted expected network errors.
+- Actual final production simulator run: 19 Almaty sales, zero rejected/failed;
+  PostgreSQL receipt count 901 -> 920. Both hour and business_day tabs updated
+  without reload (observed receipt counts 52 -> 70 and 87 -> 105 while the run was
+  active). Simulator stopped with final created=19; its data was retained.
+- Mocked browser checks passed outlet loading/empty state, card/settings errors,
+  settings saving/disabled fields, retained edits after failed PATCH, successful
+  retry, and product/alert error -> retry -> empty states. No real settings writes
+  were made in those mocked checks.
+- Known limits: card/alerts/products are HTTP snapshots with explicit refresh;
+  only rankings has a server push protocol. Existing trailing backend coalescing
+  can delay updates during uninterrupted high-rate bursts. Unsafe aggregate
+  numeric quantity/progress fields are visibly labeled. Other browsers,
+  deployment, visual design and the destructive full backend suite are unverified.
+- Existing MYLOG.md edit is untouched and unstaged. All MVP code is committed on
+  feature/dashboard. README documents the complete basic interface and checks.
+  PR targets dev; merging remains the developer's decision.

@@ -1,9 +1,11 @@
 # MD sales outlet ranking
 
-Retail-chain dashboard foundation. Local infrastructure, the NestJS backend,
-PostgreSQL connection, empty first migration, and ping/health endpoints are
-available, including Socket.IO ping/pong. The independent React frontend shows
-HTTP ping and WebSocket pong. Business features are not implemented yet.
+Retail-chain ranking dashboard backed by PostgreSQL and NestJS. The independent
+React frontend loads rankings over HTTP and receives live Socket.IO snapshots.
+The backend implements sale/return ingestion, outlet cards/settings, products,
+alerts and email delivery. The frontend connects rankings, outlet details and
+settings, alerts and the product catalogue. The interface uses basic HTML with
+minimal CSS; sales and returns come from the simulator.
 
 Prerequisites: Node.js 24.11 or newer (observed `v24.21.0`), npm, Docker Engine,
 and Docker Compose v2.
@@ -13,7 +15,7 @@ and Docker Compose v2.
 Run from the repository root:
 
 ```sh
-cp .env.example .env
+test -f .env || cp .env.example .env
 docker compose config --quiet
 docker compose up -d --wait
 docker compose ps
@@ -67,11 +69,11 @@ uses `FRONTEND_ORIGIN`.
 While the backend runs, check the HTTP listener and CORS headers in another terminal:
 
 ```sh
-curl -i --header 'Origin: http://localhost:5173' http://127.0.0.1:3000/api/ping
+curl -i --header 'Origin: http://localhost:5173' 'http://127.0.0.1:3000/api/rankings?window=hour'
 curl -i http://127.0.0.1:3000/api/health
 ```
 
-Expect HTTP 200 with `{"message":"pong"}` from ping and
+Expect HTTP 200 with a `RankingSnapshot` from rankings and
 `{"status":"ok","database":"up"}` from health. Health executes `SELECT 1`
 through a dedicated query class; it returns HTTP 503 if PostgreSQL is unavailable.
 With the example env, the CORS header is
@@ -122,11 +124,52 @@ The HTTP client uses `VITE_API_URL` (including `/api`); Socket.IO uses
 address at startup/build. Only `VITE_` values are exposed to browser code; use
 them for public settings. Restart Vite after changing env values.
 
-Open <http://localhost:5173/> in two tabs while the backend and infrastructure
-are running. Each tab should show **HTTP ping: pong** and **WebSocket pong: pong**.
-Click **Check connections** in each tab and expect both results to return to pong.
-Each tab owns its socket; the client uses WebSocket transport and sends a new ping
-on connection/reconnection. The frontend has no imports from backend code.
+Open <http://localhost:5173/> in two tabs while backend and infrastructure run.
+The table displays outlet name, rank, exact revenue, receipt count, movement,
+leader/last-place indicators, stale and behind-plan flags. Select **Last hour**
+(`hour`) or **Business day** (`business_day`). Zero-sales outlets remain visible.
+Movement compares consecutive snapshots of the same window; the first snapshot
+shows —. It resets on a window change or page reload.
+
+Each tab owns its socket and subscription. The selected window is saved in
+localStorage; reload restores the last saved selection for that browser origin.
+Changing one tab's selector does not change another tab's active subscription.
+Storage failures do not prevent the selector from working. HTTP requests have a
+10-second timeout. The page shows loading, empty and error states and provides
+**Refresh rankings** to retry HTTP and the live subscription. During a socket
+outage the last table remains visible with a disconnected message.
+
+To produce real sales, run the existing simulator in another terminal:
+
+```sh
+npm --prefix simulator run build
+npm --prefix simulator start -- --outlet 'Almaty Mall' --rate 30 --seed dashboard
+```
+
+Both tabs should update without reload. Stop the simulator with Ctrl+C; its
+accepted sales remain in PostgreSQL. No database reset is needed.
+
+The **Outlets** screen loads GET /api/outlets and lets you select an outlet.
+Its card uses GET /api/outlets/:id/card with `hour` or `business_day` and displays
+net revenue, receipts, average check, today's plan/progress, top products and UTC
+sales buckets as a table. Use **Refresh outlet card** for fresh statistics.
+Card money/averages are shown as the exact minor-unit strings returned by the API;
+the card response does not include currency. Unsafe numeric aggregate quantities
+or plan progress are labeled **Outside safe display range**, rather than rounded
+again in the UI. This affects extreme historical test data; the backend is unchanged.
+
+Outlet settings load separately through GET /api/outlets/:id/settings. Edit the
+positive integer `daily_plan_minor`, responsible name and email, then **Save
+settings** sends PATCH to the same path with only changed fields. Money remains a
+string. Saving disables inputs, reports success/errors, retains failed edits and
+refreshes the card after success. **Reload settings** reads persisted values.
+
+The **Alerts** screen uses GET /api/alerts with `active_only=true` by default.
+Select an outlet to add the supported `outlet_id` filter; uncheck **Active alerts
+only** to include history. It displays stale/behind-plan kinds, active/resolved
+state and captured facts/recipients. Alerts have no socket event; use **Refresh
+alerts**. The **Products** screen reads GET /api/products and displays SKU, name
+and exact minor-unit prices. All screens show loading/error/empty states.
 
 Quality and production commands:
 
@@ -134,6 +177,7 @@ Quality and production commands:
 npm --prefix frontend run typecheck
 npm --prefix frontend run lint
 npm --prefix frontend run format:check
+npm --prefix frontend test
 npm --prefix frontend run build
 npm --prefix frontend run format
 ```
@@ -157,71 +201,68 @@ To reproduce configuration rejection:
 VITE_SOCKET_URL= npm --prefix frontend run build
 ```
 
-Expect exit 1 naming `VITE_SOCKET_URL`. To reproduce reconnect behavior, stop the
-backend with Ctrl+C while both tabs remain open, then restart it using
-`npm --prefix backend start`. Both live results should return to pong without
-reloading. If an HTTP check failed during the outage, click **Check connections**
-after restart to retry it.
+Expect exit 1 naming `VITE_SOCKET_URL`. To reproduce reconnection, stop the
+backend with Ctrl+C while both tabs remain open, then restart with
+`npm --prefix backend start`. Both tabs should show a disconnected status,
+retain their rows and regain **Live updates connected.** with a fresh snapshot
+without reloading. Use **Refresh rankings** for an HTTP retry.
 
-Browser checks used two actual Playwright Chromium tabs in development and
-production preview. Both cards showed pong in both tabs, and retry buttons worked
-in development. Both live connections recovered after a backend restart. Fresh
-production pages had zero console errors/warnings; the deliberate outage produced
-expected connection errors. A 390px viewport had no horizontal overflow.
-These checks do not cover other browsers or a full accessibility audit.
+## Backend checks that preserve existing data
 
-## Backend test and outage check
-
-With PostgreSQL running, execute:
+The full `npm --prefix backend test` suite uses `sales_ranking_test`, but some
+integration tests truncate that database. It was not run for this dashboard
+branch because the task requires preserving all existing database data.
+The following checks run all unit tests plus health and timer e2e tests without
+truncating or deleting records (the running app can still evaluate alerts):
 
 ```sh
-npm --prefix backend test
+cd backend
+./node_modules/.bin/tsc -p test/tsconfig.json
+POSTGRES_DB=sales_ranking_test node --env-file-if-exists=../.env --test --test-concurrency=1 '.test-dist/test/*.unit-spec.js' .test-dist/test/health.e2e-spec.js .test-dist/test/realtime-rankings-timer.e2e-spec.js
 ```
 
-The two e2e tests boot the actual application, connect to PostgreSQL, and listen
-on ephemeral localhost ports. They check `/api/ping` and a Socket.IO ping/pong
-exchange over WebSocket, then close their applications and connections.
-They use Node's built-in test runner, fetch, and WebSocket; no test-runner or
-additional test-client package is required.
-TypeScript compiles source and tests into ignored `.test-dist`; the runner loads
-root `.env` before importing the app. Typecheck and lint include the test files.
+Both development and test databases already have the eight backend migrations.
+Typecheck and lint include the test files. Tests compile into ignored `.test-dist`.
 
-To check a database outage, leave the backend running in another terminal:
+The operational endpoint remains `GET /api/health`. To check its database outage
+response while the backend is running:
 
 ```sh
 docker compose stop postgres
 curl -i --max-time 10 http://127.0.0.1:3000/api/health
-curl -i --max-time 10 http://127.0.0.1:3000/api/ping
 docker compose up -d --wait postgres
 curl -i --max-time 10 http://127.0.0.1:3000/api/health
 ```
 
-Expect health HTTP 503 during the outage, ping HTTP 200, then health HTTP 200
-after PostgreSQL becomes ready. This check does not write domain data.
+Expect health HTTP 503 during the outage, then HTTP 200 after PostgreSQL is ready.
+This outage procedure was not rerun in the dashboard branch; its sanitized 503
+behavior is covered by a unit test.
 
-## Realtime ping/pong
+## Live rankings
 
-Socket.IO shares the backend HTTP server and uses `/socket.io/`, separate from
-the `/api` prefix. Use the backend origin as the client URL: with the example
-env, `http://localhost:3000`. Its CORS origin comes from `FRONTEND_ORIGIN`.
+Socket.IO shares the HTTP listener at `/socket.io/`, outside the `/api` prefix.
+`VITE_SOCKET_URL` is the backend origin, e.g. `http://localhost:3000`.
+The shared adapter configures polling CORS from `FRONTEND_ORIGIN`.
+The client connects with WebSocket first and enables `tryAllTransports` so
+HTTP polling is attempted if WebSocket fails. This avoids cancelling an in-flight
+polling upgrade when switching windows immediately after the first snapshot.
 
-Clients emit `ping` with no payload and listen for `pong`, whose payload is
-`{"message":"pong"}`. Each reply goes to the requesting client.
+On every connection/reconnection the client sends `rankings.subscribe` with
+`{ window: "hour" }` or `{ window: "business_day" }`. It checks the acknowledgement
+and receives `rankings.snapshot`. Cleanup sends `rankings.unsubscribe` with `{}`
+when connected, removes named listeners, cancels timers and disconnects. Delayed
+callbacks after cleanup are ignored. A subscription acknowledgement times out
+after five seconds; a missing initial snapshot becomes visible after ten seconds.
+HTTP and live snapshots share validation. Duplicate/older snapshots cannot
+replace newer data or change the movement baseline.
 
-With the backend running, check the polling handshake and CORS header:
+The backend uses a trailing coalescing delay (default 250 ms). Continuous sales
+closer together than that delay can postpone a snapshot until the burst becomes
+quiet. This is existing backend behavior; no frontend polling loop was added.
 
-```sh
-curl -i --header 'Origin: http://localhost:5173' 'http://127.0.0.1:3000/socket.io/?EIO=4&transport=polling'
-```
-
-Expect HTTP 200, `Access-Control-Allow-Origin: http://localhost:5173`, and an
-Engine.IO open packet beginning with `0`. Reproduce the actual WebSocket event
-exchange with `npm --prefix backend test`; its protocol helper connects the
-Socket.IO namespace before sending the application ping. The frontend uses
-socket.io-client rather than this test-only protocol helper.
-
-Socket.IO CORS applies to HTTP polling; browser WebSocket upgrades do not use
-CORS checks.
+The temporary application ping/pong UI, endpoint, events and tests were removed
+after real integration passed. Socket.IO's own transport heartbeat is preserved.
+For exact response/event shapes, see [API contract](docs/API_CONTRACT.md).
 
 ## Database migrations
 
@@ -238,22 +279,11 @@ Shell values take precedence. The CLI and application share PostgreSQL options
 and startup validation. No ts-node dependency is needed; the CLI loads compiled
 ESM from `backend/dist/database/data-source.js`.
 
-The first migration is intentionally empty. TypeORM creates its `migrations`
-history table and records `Initialize1791841766550`; no domain schema is created.
-After execution, `migration:show` displays `[X]`. Running `migration:run` again
-reports no pending migrations. Application startup never synchronizes schemas or
-runs migrations automatically.
-
-To revert the latest migration locally, then reapply it:
-
-```sh
-npm --prefix backend run migration:revert
-npm --prefix backend run migration:show
-npm --prefix backend run migration:run
-```
-
-For this empty migration, rollback only removes its history row; the history
-table remains. Inspect pending migration changes before running later rollbacks.
+There are eight migrations, including catalogue seed data, event/receipt/return
+facts, alerts and outbox tables. The initial migration is empty; later migrations
+create the domain schema. Repeating `migration:run` reports no pending migrations
+when all are applied. Startup never synchronizes schemas or applies migrations.
+No migrations, rollbacks or database resets were run for this frontend branch.
 
 Inspect local table names and migration history:
 
@@ -261,8 +291,8 @@ Inspect local table names and migration history:
 docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT tablename FROM pg_tables WHERE schemaname = current_schema() ORDER BY tablename;" -c "SELECT name, count(*) FROM migrations GROUP BY name;"'
 ```
 
-On this foundation's local database, the only public table is `migrations`, with
-one history row for the initial migration.
+The existing development database has 11 public tables and eight migration
+history rows. Existing outlets and historical sales were preserved.
 
 Check database env validation without contacting PostgreSQL:
 
@@ -275,19 +305,42 @@ Expect a nonzero exit and an error naming `POSTGRES_PORT`.
 ## Review workflow
 
 `main` is stable and `dev` is integration. Feature branches start from `dev`;
-the developer reviews, pushes, and merges them. After each merge the assistant
-runs `git checkout dev` and `git pull` before starting the next feature.
+feature work is pushed for review, and the developer approves merges. After each
+merge the assistant runs `git checkout dev` and `git pull` before starting the next feature.
 A release branch is created from `dev` only at the end.
 
-## Verified / Not verified
+## Functional frontend verification — 2026-10-13
 
-Updated at the end of every branch. Commands reproduce the checks.
-Results retain earlier branch checks and are updated when rerun. Migration checks
-are from `feature/backend-database`; database-outage checks are from `feature/backend-health`.
-Backend quality/e2e and frontend/browser checks were run in
-`feature/frontend-foundation`. Results describe only checks actually run.
-Infrastructure and smoke-test servers are stopped; the applied migration is
-retained in the PostgreSQL volume.
+| Check | Result |
+| --- | --- |
+| Frontend typecheck, lint, format, build | Passed |
+| Frontend `npm test` | 19 passed; uses node:test and the existing Vite transform, no added dependencies |
+| Backend typecheck, lint, format | Passed again in the final MVP; the existing compiled backend was reused |
+| Non-destructive backend tests above | 52 passed, including real PostgreSQL health and periodic Socket.IO snapshots |
+| Real PostgreSQL to browser integration | Both windows rendered all 41 existing outlets; Bishkek business-day revenue `55340232221132258342` and 166 receipts matched direct SQL |
+| Two actual Playwright Chromium tabs | Real simulator sales changed revenue/counts without reload; independent window subscriptions and saved-window reload passed |
+| Backend restart | Both tabs retained rows, showed disconnection, then resubscribed and received fresh snapshots without reload |
+| Post-removal live integration | Both tabs received simulator snapshots and displayed rank movement; `/api/ping` returned 404, `/api/health` returned 200 |
+| Production preview | Two tabs, rapid window changes, periodic snapshots and exact subscribe/unsubscribe frames passed; fresh pages had no console errors or warnings |
+| WebSocket handshake failure | Real polling fallback and periodic snapshots passed with the WebSocket URL deliberately redirected to a missing route |
+| Mocked browser edge states | Loading, empty, 503 error, retry recovery, blocked socket and blocked localStorage passed |
+| Full backend integration suite | Not run: its truncation hooks conflict with data-preservation requirement |
+| Outlet card and settings | Both windows, statistics, product/series tables and exact monetary strings passed; real PATCH/read-back persisted plan/name/email, then test edits were restored |
+| Alerts and products | Active-only/default and outlet/history filters passed; six product rows rendered; real HTTP requests returned 200 |
+| Form and list error states | Mocked loading/empty/503/retry passed; save disabled inputs during the request and retained edits on failure |
+| Final production simulator run | 19 new Almaty sales reached both hour/business_day tabs; PostgreSQL receipt count increased from 901 to 920 |
+| Other browsers, deployment, visual design | Not verified; design is deferred |
+
+The first dashboard simulator runs added 464 sales (52 Almaty, 412 Moscow);
+the final production MVP check added 19 Almaty sales. All 483 remain in PostgreSQL,
+with no simulator rejections or failures. Settings test changes were restored. Historical test outlets were
+left in place. MYLOG.md's pre-existing edit was preserved and never staged.
+
+## Earlier foundation verification (historical)
+
+These earlier measurements describe the removed connection demonstration and the
+initial empty migration. They are retained as history, not current reproduction
+steps or dashboard results. Current commands and results are listed above.
 
 | Check | Command / action | Result |
 | --- | --- | --- |

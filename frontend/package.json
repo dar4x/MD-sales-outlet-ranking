@@ -12,6 +12,7 @@
     "preview": "node scripts/preview.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "lint": "eslint . --max-warnings 0",
+    "test": "node --test 'test/*.test.mjs'",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
